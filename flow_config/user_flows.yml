@@ -275,10 +275,16 @@ flows:
   # ============ 退款申请 ============
   refund_request:
     name: 退款申请
-    description: 帮学员对订单明细发起全额退款申请：订单号 → 选择明细 → 原因 → 类型 → 确认 → 提交。
+    description: 帮学员对订单明细发起全额退款申请：订单号 → 选择明细 → 类型 → 确认 → 提交。
     steps:
       - id: start
         type: start
+        next: prefill_order
+
+      # 会话内刚查过订单时自动沿用（透明通知 + 确认页二次确认）
+      - id: prefill_order
+        type: action
+        action: action_prefill_order
         next: ask_order_no
 
       - id: ask_order_no
@@ -302,7 +308,7 @@ flows:
         type: collect
         slot_name: order_item_choice
         template:
-          text: "该订单包含多个报名明细，请回复序号选择要退款的班次：\n{{ slots.order_item_choices_text }}"
+          text: "{% if slots.order_switch_notice %}{{ slots.order_switch_notice }}\n{% endif %}该订单包含多个报名明细，请回复序号选择要退款的班次：\n{{ slots.order_item_choices_text }}"
         next: select_item
 
       - id: select_item
@@ -321,7 +327,7 @@ flows:
         slot_name: refund_type
         options: [personal_reason, course_unsatisfied, schedule_conflict, duplicate_purchase]
         template:
-          text: "请选择退款类型（回复序号或名称，也可以直接说明原因）：\n1 个人原因\n2 课程不满意\n3 时间冲突\n4 重复购买"
+          text: "{% if slots.order_switch_notice %}{{ slots.order_switch_notice }}\n{% endif %}请选择退款类型（回复序号或名称，也可以直接说明原因）：\n1 个人原因\n2 课程不满意\n3 时间冲突\n4 重复购买"
         next: normalize_refund_type
 
       - id: normalize_refund_type
@@ -420,8 +426,14 @@ flows:
         action: action_normalize_ticket_type
         next:
           - if: "slots.ticket_type"
-            then: ask_order_no
+            then: prefill_order
           - else: ask_ticket_type
+
+      # 会话内刚查过订单时自动沿用（透明通知 + 确认页二次确认）
+      - id: prefill_order
+        type: action
+        action: action_prefill_order
+        next: ask_order_no
 
       - id: ask_order_no
         type: collect
@@ -444,7 +456,7 @@ flows:
         type: collect
         slot_name: order_item_choice
         template:
-          text: "该订单包含多个报名明细，请回复序号选择关联的班次：\n{{ slots.order_item_choices_text }}"
+          text: "{% if slots.order_switch_notice %}{{ slots.order_switch_notice }}\n{% endif %}该订单包含多个报名明细，请回复序号选择关联的班次：\n{{ slots.order_item_choices_text }}"
         next: select_item
 
       - id: select_item
@@ -482,7 +494,7 @@ flows:
         type: collect
         slot_name: issue_description
         template:
-          text: "请描述你遇到的问题（会作为工单内容，请尽量具体，如：第三章视频一直加载不出来）。"
+          text: "{% if slots.order_switch_notice %}{{ slots.order_switch_notice }}\n{% endif %}请描述你遇到的问题（会作为工单内容，请尽量具体，如：第三章视频一直加载不出来）。"
         next: ask_confirm_ticket
 
       - id: ask_confirm_ticket

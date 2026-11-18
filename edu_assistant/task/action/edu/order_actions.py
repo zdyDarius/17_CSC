@@ -27,6 +27,7 @@ async def _resolve_order(ctx: ActionContext, order_no: str) -> dict:
     """订单号 → 订单列表条目 + 详情 + 明细（只读适配器）。
 
     返回 {order, detail, items}；查无/越权时抛 EduDataApiError(ORDER_NOT_FOUND)。
+    成功解析后写入会话缓存（供退单/工单等新流程沿用，写操作仍经确认页二次确认）。
     """
     row = await ctx.edu_client.find_order_by_no(ctx.user_id, order_no)
     if row is None:
@@ -34,6 +35,7 @@ async def _resolve_order(ctx: ActionContext, order_no: str) -> dict:
     order_id = int(row["orderId"])
     detail = await ctx.edu_client.get_order(ctx.user_id, order_id)
     items = await ctx.order_item_adapter.list_order_items(int(ctx.user_id), order_id)
+    ctx.state.session_cache.last_order_no = str(row.get("orderNo") or order_no)
     return {"order": row, "detail": detail, "items": items}
 
 
@@ -64,6 +66,33 @@ def _render_order_summary(order: dict, detail: dict, items: list[dict]) -> str:
     else:
         lines.append("- 该订单暂无报名明细")
     return "\n".join(lines)
+
+
+@register_action("action_prefill_order")
+class PrefillOrderAction:
+    """新写流程需订单号且用户未提供时，沿用会话内最近一次查询的订单。
+
+    沿用是"透明可见"的：通知随下一个提问模板一起展示，且退款/工单
+    提交前仍有确认页二次确认（计划 4.3 写操作安全复用）。
+    """
+
+    async def run(self, ctx: ActionContext) -> ActionResult:
+        slots = ctx.slots
+        if slots.get("order_no"):
+            return ActionResult()  # 用户消息已带订单号
+        cached = ctx.state.session_cache.last_order_no
+        if not cached:
+            return ActionResult()
+        return ActionResult(
+            slots_update={
+                "order_no": str(cached),
+                "order_switch_notice": (
+                    f"已沿用你刚查过的订单 {cached}"
+                    f"（如需更换，请回复「取消」后重新发起并带上订单号）。"
+                ),
+            },
+            clear_slots=["resolve_failed"],
+        )
 
 
 @register_action("action_resolve_order")

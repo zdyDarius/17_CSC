@@ -38,6 +38,8 @@ class SessionCache:
     student_profile: dict | None = None
     # 最近一次进度查询的班次（供「考试分数」等机器人邀请的追问复用）
     last_cohort: dict | None = None
+    # 最近一次查询/确认的订单号（供退单/工单等新流程沿用；写操作仍经确认页二次确认）
+    last_order_no: str | None = None
 
 
 @dataclass

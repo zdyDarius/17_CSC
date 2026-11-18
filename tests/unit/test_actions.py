@@ -286,3 +286,29 @@ def test_list_tickets_renders_summary_and_empty_case():
     ctx2.edu_client = FakeQueryClient()
     result2 = asyncio.run(get_action("action_list_tickets").run(ctx2))
     assert "没有找到" in result2.slots_update["tickets_summary"]
+
+
+# —— 会话缓存订单沿用（查完订单直接退单，流程不断裂） ——
+
+def test_prefill_order_from_session_cache():
+    import edu_assistant.task.action.edu.order_actions  # noqa: F401
+
+    ctx = make_ctx({})
+    ctx.state.session_cache.last_order_no = "ORD0000037816"
+    result = asyncio.run(get_action("action_prefill_order").run(ctx))
+    assert result.slots_update["order_no"] == "ORD0000037816"
+    assert "已沿用" in result.slots_update["order_switch_notice"]
+
+
+def test_prefill_order_noop_when_provided_or_no_cache():
+    import edu_assistant.task.action.edu.order_actions  # noqa: F401
+
+    # 用户已带订单号 → 不覆盖
+    ctx = make_ctx({"order_no": "ORD9999999999"})
+    ctx.state.session_cache.last_order_no = "ORD0000037816"
+    result = asyncio.run(get_action("action_prefill_order").run(ctx))
+    assert result.slots_update == {}
+    # 无缓存 → 不填
+    ctx2 = make_ctx({})
+    result2 = asyncio.run(get_action("action_prefill_order").run(ctx2))
+    assert result2.slots_update == {}
