@@ -10,7 +10,7 @@
 ├── init_db.py                  # 客服库自动建库建表（幂等，不触碰业务库）
 ├── pyproject.toml / uv.lock
 ├── .env.example                # 配置模板（不含密钥）
-├── flow_config/user_flows.yml  # 4 个任务流程（订单查询/学习进度/退款/工单）
+├── flow_config/user_flows.yml  # 6 个任务流程（订单查询/学习进度/退款/工单 + 退款进度/工单进度查询）
 ├── knowledge_base/
 │   ├── faq.json                # FAQ（退款/开课/换班等固定问题）
 │   └── documents/*.md          # 平台文档（BM25 RAG 语料）
@@ -25,10 +25,10 @@
 │   │   ├── flow/               # YAML 加载 + 白名单条件解析（无 eval）
 │   │   ├── flowexecutor/       # 状态机推进（死循环保护）
 │   │   ├── action/             # 教育业务 Action 与注册表
-│   │   ├── response/           # 模板渲染（禁止 None）
-│   │   └── tasklifecycle/      # 任务事件中文提示
+│   │   └── response/           # 模板渲染（禁止 None）
 │   ├── knowledge/              # 意图、Provider（FAQ/RAG/API）、回复器
 │   ├── chitchat/ clarify/      # 闲聊兜底 / 可控澄清
+│   ├── lifecycle/              # 任务事件模型与中文提示（审计落 task_event 表）
 │   ├── domain/                 # message / state / focused object
 │   ├── repository/             # SQLAlchemy 异步 ORM（5 张表）
 │   ├── integrations/edu_data/  # API client + 只读订单明细适配器
@@ -120,7 +120,7 @@ curl -s -H "X-User-Id: 1001" http://127.0.0.1:8000/api/v1/me/cohorts | head
 | --- | --- |
 | dialogue_session | 会话与 X-User-Id 绑定 |
 | dialogue_message | 消息历史，(session_id, client_message_id) 唯一防重 |
-| dialogue_state | 对话状态 JSON（版本号 + 乐观锁） |
+| dialogue_state | 对话状态 JSON（含状态版本号；会话级串行锁保证并发安全） |
 | task_event | 任务生命周期与关键动作审计 |
 | dialogue_trace | request_id 轨迹：规划摘要/轨道/动作/耗时/错误码 |
 
@@ -152,6 +152,7 @@ curl -s -H "X-User-Id: 1001" http://127.0.0.1:8000/api/v1/me/cohorts | head
 | GET | /api/sessions/{id}/state | 当前任务、暂停栈、非敏感槽位 |
 | GET | /api/sessions/{id}/traces | 按 request_id 的处理轨迹 |
 | GET | /api/traces/{request_id} | 单条轨迹详情（校验所属会话归属） |
+| GET | /api/demo/context | 演示页学籍卡聚合（档案/订单明细/班次进度/退款，只读） |
 | GET | /health / / | 健康检查 / 演示页 |
 
 详细请求响应格式与 SSE 事件见 [api.md](./api.md)。

@@ -11,12 +11,11 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from edu_assistant.api.dependencies import get_dialogue_service
+from edu_assistant.api.identity import UserIdHeader, require_user_id
 from edu_assistant.api.schemas import ChatRequest, ChatResponse
 from edu_assistant.conf.config import get_settings
 from edu_assistant.domain.message import (
@@ -26,21 +25,9 @@ from edu_assistant.domain.message import (
     UserMessage,
 )
 from edu_assistant.service.dialogue_service import DialogueService
-from edu_assistant.utils.errors import bad_request, not_found, unauthorized
+from edu_assistant.utils.errors import bad_request, not_found
 
 router = APIRouter()
-
-UserIdHeader = Annotated[str | None, Header(alias="X-User-Id")]
-
-
-def _current_user_id(x_user_id: str | None) -> str:
-    """X-User-Id 必填且为数字（存在性由 edu-data API 校验）。"""
-    if not x_user_id or not x_user_id.strip():
-        raise unauthorized("MISSING_USER_ID", "缺少请求头 X-User-Id")
-    value = x_user_id.strip()
-    if not value.isdigit():
-        raise unauthorized("INVALID_USER_ID", "X-User-Id 必须为数字用户 ID")
-    return value
 
 
 def _build_user_message(chat_request: ChatRequest, user_id: str) -> UserMessage:
@@ -88,7 +75,7 @@ async def chat(
     dialogue_service: DialogueService = Depends(get_dialogue_service),
     x_user_id: UserIdHeader = None,
 ) -> ChatResponse:
-    user_id = _current_user_id(x_user_id)
+    user_id = require_user_id(x_user_id)
     user_message = _build_user_message(chat_request, user_id)
     result = await dialogue_service.process_message(user_message)
     return ChatResponse(
@@ -129,7 +116,7 @@ async def chat_stream(
     dialogue_service: DialogueService = Depends(get_dialogue_service),
     x_user_id: UserIdHeader = None,
 ) -> StreamingResponse:
-    user_id = _current_user_id(x_user_id)
+    user_id = require_user_id(x_user_id)
     user_message = _build_user_message(chat_request, user_id)
 
     async def event_stream() -> AsyncIterator[str]:

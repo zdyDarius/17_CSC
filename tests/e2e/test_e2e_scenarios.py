@@ -335,3 +335,45 @@ def test_cancel_business_record_does_not_submit():
         text = _bot_text(result)
         # 不应开始收集订单号/描述等提交动作
         assert "订单号（形如" not in text and "请选择工单类型" not in text, text[:200]
+
+
+# ============ 业务对象消息：自动补槽（需求 5.1） ============
+
+
+def test_object_message_fills_slot():
+    """任务等待订单号时发送订单对象消息 → 自动补槽推进。"""
+    with _client() as client:
+        session = _new_session(client)
+        r1 = _chat(client, session, "我要退款")
+        assert "订单号" in _bot_text(r1)
+        resp = client.post(
+            "/api/chat",
+            headers={"X-User-Id": USER},
+            json={
+                "sessionId": session,
+                "messageId": f"e2e-obj-{uuid.uuid4().hex[:12]}",
+                "object": {"type": "order", "id": DEMO_ORDER_NO, "title": "考研数学冲刺模考班"},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["track"] == "task"
+        assert "退款类型" in _bot_text(data), _bot_text(data)[:200]
+
+
+def test_object_message_without_task_guides():
+    """无进行中任务时发送对象消息 → 引导表达意图，不报错。"""
+    with _client() as client:
+        session = _new_session(client)
+        resp = client.post(
+            "/api/chat",
+            headers={"X-User-Id": USER},
+            json={
+                "sessionId": session,
+                "messageId": f"e2e-obj2-{uuid.uuid4().hex[:12]}",
+                "object": {"type": "order", "id": DEMO_ORDER_NO, "title": "订单"},
+            },
+        )
+        assert resp.status_code == 200
+        text = _bot_text(resp.json())
+        assert ("想做什么" in text) or ("查询" in text) or ("退款" in text), text[:200]

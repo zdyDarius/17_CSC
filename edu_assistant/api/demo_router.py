@@ -7,11 +7,11 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 
 from edu_assistant.api.dependencies import get_dialogue_service
+from edu_assistant.api.identity import UserIdHeader, require_user_id
 from edu_assistant.engine.builder import EngineComponents
 from edu_assistant.integrations.edu_data.order_item_adapter import (
     ORDER_ITEM_STATUS_LABELS,
@@ -24,21 +24,6 @@ from edu_assistant.utils.logging import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter()
-
-UserIdHeader = Annotated[str | None, Header(alias="X-User-Id")]
-
-
-def _require_user_id(x_user_id: str | None) -> str:
-    if not x_user_id or not x_user_id.strip():
-        from edu_assistant.utils.errors import unauthorized
-
-        raise unauthorized("MISSING_USER_ID", "缺少请求头 X-User-Id")
-    value = x_user_id.strip()
-    if not value.isdigit():
-        from edu_assistant.utils.errors import unauthorized
-
-        raise unauthorized("INVALID_USER_ID", "X-User-Id 必须为数字用户 ID")
-    return value
 
 
 async def _load_profile(components: EngineComponents, user_id: str) -> dict | None:
@@ -168,7 +153,7 @@ async def get_demo_context(
     dialogue_service=Depends(get_dialogue_service),
     x_user_id: UserIdHeader = None,
 ) -> dict:
-    user_id = _require_user_id(x_user_id)
+    user_id = require_user_id(x_user_id)
     components: EngineComponents = dialogue_service.components
 
     profile, orders_refunds, cohorts = await asyncio.gather(

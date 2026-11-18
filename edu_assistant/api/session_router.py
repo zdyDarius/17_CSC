@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from fastapi import APIRouter, Depends
 
-from fastapi import APIRouter, Depends, Header
-
+from edu_assistant.api.identity import UserIdHeader, require_user_id
 from edu_assistant.api.schemas import (
     HistoryResponse,
     SessionCreateResponse,
@@ -18,28 +17,13 @@ from edu_assistant.api.dependencies import get_dialogue_service
 
 router = APIRouter()
 
-UserIdHeader = Annotated[str | None, Header(alias="X-User-Id")]
-
-
-def _require_user_id(x_user_id: str | None) -> str:
-    if not x_user_id or not x_user_id.strip():
-        from edu_assistant.utils.errors import unauthorized
-
-        raise unauthorized("MISSING_USER_ID", "缺少请求头 X-User-Id")
-    value = x_user_id.strip()
-    if not value.isdigit():
-        from edu_assistant.utils.errors import unauthorized
-
-        raise unauthorized("INVALID_USER_ID", "X-User-Id 必须为数字用户 ID")
-    return value
-
 
 @router.post("/api/sessions", response_model=SessionCreateResponse)
 async def create_session(
     dialogue_service: DialogueService = Depends(get_dialogue_service),
     x_user_id: UserIdHeader = None,
 ) -> SessionCreateResponse:
-    user_id = _require_user_id(x_user_id)
+    user_id = require_user_id(x_user_id)
     result = await dialogue_service.create_session(user_id)
     return SessionCreateResponse(**result)
 
@@ -50,7 +34,7 @@ async def get_history(
     dialogue_service: DialogueService = Depends(get_dialogue_service),
     x_user_id: UserIdHeader = None,
 ) -> HistoryResponse:
-    user_id = _require_user_id(x_user_id)
+    user_id = require_user_id(x_user_id)
     messages = await dialogue_service.get_history(session_id, user_id)
     return HistoryResponse(sessionId=session_id, messages=messages)
 
@@ -61,7 +45,7 @@ async def get_state(
     dialogue_service: DialogueService = Depends(get_dialogue_service),
     x_user_id: UserIdHeader = None,
 ) -> StateResponse:
-    user_id = _require_user_id(x_user_id)
+    user_id = require_user_id(x_user_id)
     state = await dialogue_service.get_state(session_id, user_id)
     return StateResponse(**state)
 
@@ -72,7 +56,7 @@ async def get_traces(
     dialogue_service: DialogueService = Depends(get_dialogue_service),
     x_user_id: UserIdHeader = None,
 ) -> list[TraceItem]:
-    user_id = _require_user_id(x_user_id)
+    user_id = require_user_id(x_user_id)
     traces = await dialogue_service.get_traces(session_id, user_id)
     return [TraceItem(**t) for t in traces]
 
@@ -84,6 +68,6 @@ async def get_trace(
     x_user_id: UserIdHeader = None,
 ) -> TraceDetail:
     """按 request_id 查询单条处理轨迹（校验所属会话归属）。"""
-    user_id = _require_user_id(x_user_id)
+    user_id = require_user_id(x_user_id)
     trace = await dialogue_service.get_trace(request_id, user_id)
     return TraceDetail(**trace)

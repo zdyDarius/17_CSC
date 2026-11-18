@@ -35,14 +35,23 @@ WELCOME_TEXT = (
     "也可以问我课程介绍、退款政策、报名与开课政策、平台使用指南。请问需要什么帮助？"
 )
 
-# 会话级串行锁
+# 会话级串行锁。
+# 边界说明：仅在单进程内有效（多 worker 部署需改用数据库锁或外部锁）；
+# 字典随会话数增长，超过上限时清理未持锁条目，避免长期运行内存泄漏。
 _session_locks: dict[str, asyncio.Lock] = {}
+MAX_SESSION_LOCKS = 512
 
 
 def _get_session_lock(session_id: str) -> asyncio.Lock:
-    if session_id not in _session_locks:
-        _session_locks[session_id] = asyncio.Lock()
-    return _session_locks[session_id]
+    lock = _session_locks.get(session_id)
+    if lock is None:
+        if len(_session_locks) >= MAX_SESSION_LOCKS:
+            idle = [k for k, v in _session_locks.items() if not v.locked()]
+            for key in idle[: len(idle) // 2]:
+                _session_locks.pop(key, None)
+        lock = asyncio.Lock()
+        _session_locks[session_id] = lock
+    return lock
 
 
 class DialogueService:
@@ -134,7 +143,7 @@ class DialogueService:
                     messages = [BotMessage(text="抱歉，我暂时没能生成回复，请换个说法再试一次。")]
 
                 # 5 校验通过后持久化：先更新历史摘要与状态，再落消息
-                turn_no = len(await repo.list_messages(session_id, limit=500))
+                turn_no = await repo.next_turn_no(session_id)
                 user_content = (
                     {"text": user_message.text}
                     if user_message.type == MessageType.TEXT

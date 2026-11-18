@@ -74,7 +74,7 @@ def build_engine(settings: Settings | None = None) -> EngineComponents:
         "api.series": SeriesApiProvider(edu_client),
         "api.cohort": CohortApiProvider(edu_client),
     }
-    knowledge_handler = KnowledgeHandler(providers, KnowledgeResponder())
+    knowledge_handler = KnowledgeHandler(providers, KnowledgeResponder(), flow_catalog=catalog)
 
     # 规划与校验
     intents = intents_catalog()

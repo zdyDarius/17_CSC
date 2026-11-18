@@ -20,9 +20,15 @@ logger = get_logger(__name__)
 
 
 class KnowledgeHandler:
-    def __init__(self, providers: dict[str, BaseProvider], responder: KnowledgeResponder) -> None:
+    def __init__(
+        self,
+        providers: dict[str, BaseProvider],
+        responder: KnowledgeResponder,
+        flow_catalog=None,
+    ) -> None:
         self.providers = providers
         self.responder = responder
+        self.flow_catalog = flow_catalog  # 用于把槽位名映射为中文标签
 
     async def handle(
         self,
@@ -85,8 +91,22 @@ class KnowledgeHandler:
         active = state.tasks.active
         if active is not None:
             collected = [k for k, v in (active.slots or {}).items() if v and not k.startswith("_")]
+            labels = self._slot_labels(active, collected)
             hint = f"我们刚才的「{active.flow_name}」还在继续"
-            if collected:
-                hint += f"（已收集：{ '、'.join(collected[:5]) }）"
+            if labels:
+                hint += f"（已收集：{'、'.join(labels[:5])}）"
             messages.append(BotMessage(text=f"{hint}，随时告诉我要继续、补充信息或取消。"))
         return messages
+
+    def _slot_labels(self, active, keys: list[str]) -> list[str]:
+        """槽位名 → 流程声明的中文标签（无映射时回退原名）。"""
+        flow = (
+            self.flow_catalog.flows.get(active.flow_id)
+            if self.flow_catalog is not None
+            else None
+        )
+        labels = []
+        for key in keys:
+            slot = flow.slots.get(key) if flow is not None else None
+            labels.append(slot.label if slot is not None and slot.label else key)
+        return labels

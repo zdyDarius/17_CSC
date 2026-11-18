@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import re
+
 import yaml
 
 from edu_assistant.task.flow.models import (
@@ -29,14 +31,51 @@ from edu_assistant.task.flow.steps import (
 from edu_assistant.utils.errors import FlowDefinitionError
 
 
+def _load_yaml_mapping(text: str, source: Path) -> dict:
+    """safe_load + 顶层/槽位重复 key 检测（PyYAML 默认静默覆盖后者）。"""
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise FlowDefinitionError(f"YAML 解析失败: {exc}") from exc
+
+    # 重复 key 检测：扫描原始文本中的同层级缩进 key（slots 内、flows 内各一层）
+    def _dup_keys(section_lines: list[str]) -> list[str]:
+        seen: dict[str, int] = {}
+        dups = []
+        for line in section_lines:
+            stripped = line.strip()
+            if stripped.endswith(":") or ":" in stripped:
+                key = stripped.split(":", 1)[0].strip()
+                if key:
+                    seen[key] = seen.get(key, 0) + 1
+        return [k for k, n in seen.items() if n > 1]
+
+    lines = text.splitlines()
+    # 顶层 key（无缩进）
+    top_dups = _dup_keys([ln for ln in lines if ln and not ln.startswith((" ", "#", "-"))])
+    if top_dups:
+        raise FlowDefinitionError(f"{source.name} 顶层存在重复定义: {top_dups}")
+    # slots 段内（两空格缩进且在 slots: 与 flows: 之间）
+    in_slots = False
+    slot_lines: list[str] = []
+    for ln in lines:
+        if re.match(r"^slots:\s*$", ln):
+            in_slots = True
+            continue
+        if in_slots and re.match(r"^flows:\s*$", ln):
+            break
+        if in_slots:
+            slot_lines.append(ln)
+    slot_dups = _dup_keys([ln for ln in slot_lines if ln.startswith("  ") and not ln.startswith("    ")])
+    if slot_dups:
+        raise FlowDefinitionError(f"{source.name} slots 存在重复声明: {slot_dups}")
+    return data
+
+
 class FlowLoader:
     def load(self, path: Path, registered_actions: set[str] | None = None) -> FlowCatalog:
         registered_actions = registered_actions or set()
-        text = path.read_text(encoding="utf-8")
-        try:
-            data = yaml.safe_load(text)
-        except yaml.YAMLError as exc:
-            raise FlowDefinitionError(f"YAML 解析失败: {exc}") from exc
+        data = _load_yaml_mapping(path.read_text(encoding="utf-8"), path)
         if not isinstance(data, dict) or "flows" not in data or "slots" not in data:
             raise FlowDefinitionError("流程文件必须包含顶层 slots 和 flows 字段")
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from edu_assistant.integrations.edu_data.order_item_adapter import REFUND_STATUS_LABELS
 from edu_assistant.plan.command import SetSlotsCommand, StartFlowCommand
 from edu_assistant.task.action.base import ActionContext, ActionResult
+from edu_assistant.task.action.edu.common import map_alias as _map_alias
 from edu_assistant.task.action.edu.refund_actions import parse_confirm
 from edu_assistant.task.action.registry import register_action
 from edu_assistant.utils.errors import EduDataApiError, EduDataNetworkError
@@ -35,15 +36,6 @@ TICKET_TYPE_ALIASES = {
 
 DEFAULT_PRIORITY = "medium"
 TICKET_SOURCE = "user_app"
-
-
-def _map_alias(raw: str, aliases: dict[str, str]) -> str | None:
-    """别名归一：精确 → 小写精确 → 包含式匹配（别名是输入子串且枚举唯一）。"""
-    mapped = aliases.get(raw) or aliases.get(raw.lower())
-    if mapped:
-        return mapped
-    hits = {value for alias, value in aliases.items() if alias and alias in raw}
-    return hits.pop() if len(hits) == 1 else None
 
 
 async def _ensure_student_id(ctx: ActionContext) -> int:

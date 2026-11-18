@@ -13,11 +13,7 @@ from typing import Any
 import httpx
 
 from edu_assistant.conf.config import get_settings
-from edu_assistant.utils.errors import (
-    EduDataApiError,
-    EduDataNetworkError,
-    not_found as http_not_found,
-)
+from edu_assistant.utils.errors import EduDataApiError, EduDataNetworkError
 from edu_assistant.utils.httpx_client import get_http_client
 from edu_assistant.utils.logging import get_logger
 
@@ -71,8 +67,6 @@ class EduDataClient:
         try:
             payload = response.json()
         except ValueError:
-            if response.status_code == 404 and not str(response.url.path).startswith("/api"):
-                raise http_not_found("NOT_FOUND", "接口不存在")
             raise EduDataApiError(
                 "EDU_API_BAD_RESPONSE", f"业务服务响应异常({response.status_code})", 502
             ) from None

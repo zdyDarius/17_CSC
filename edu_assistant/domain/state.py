@@ -127,7 +127,7 @@ class DialogueState:
     focused_object: MessageObject | None = None
     # 最近几轮对话摘要 [{"role": "user"/"assistant", "content": "..."}]
     history: list[dict] = field(default_factory=list)
-    state_version: int = 0  # 持久化乐观锁版本
+    state_version: int = 0  # 状态版本号（并发安全由 service 层会话级串行锁保证）
 
     def append_history(self, role: str, content: str, max_turns: int = 12) -> None:
         if not content:

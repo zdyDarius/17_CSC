@@ -88,9 +88,6 @@ slots:
   tickets_summary:
     type: text
     label: 工单列表摘要
-  refund_no:
-    type: text
-    label: 退款编号（查询用）
   refunds_summary:
     type: text
     label: 退款列表摘要

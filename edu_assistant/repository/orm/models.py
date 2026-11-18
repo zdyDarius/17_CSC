@@ -2,7 +2,7 @@
 
 - dialogue_session：会话与身份绑定
 - dialogue_message：消息历史，(session_id, client_message_id) 唯一约束防重
-- dialogue_state：对话状态 JSON（带版本乐观锁）
+- dialogue_state：对话状态 JSON（带状态版本号，并发安全由会话级串行锁保证）
 - task_event：任务生命周期与关键动作审计
 - dialogue_trace：处理轨迹（request_id 串联意图、轨道、动作、耗时）
 """

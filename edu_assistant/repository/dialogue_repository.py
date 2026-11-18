@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edu_assistant.domain.message import MessageObject
@@ -161,19 +161,35 @@ class DialogueRepository:
         )
         return result.scalar_one_or_none()
 
+    async def next_turn_no(self, session_id: str) -> int:
+        """下一轮次号 = MAX(turn_no)+1（聚合查询，无条数上限）。"""
+        result = await self.session.execute(
+            select(func.coalesce(func.max(DialogueMessageRecord.turn_no), 0)).where(
+                DialogueMessageRecord.session_id == session_id
+            )
+        )
+        return int(result.scalar_one() or 0) + 1
+
     async def get_assistant_messages_after(
         self, session_id: str, user_message_id: int
     ) -> list[DialogueMessageRecord]:
+        """该 user 消息之后的 assistant 回复；到下一条 user 消息为止（防重回放窗口过宽）。"""
         result = await self.session.execute(
             select(DialogueMessageRecord)
             .where(
                 DialogueMessageRecord.session_id == session_id,
                 DialogueMessageRecord.id > user_message_id,
-                DialogueMessageRecord.role == "assistant",
             )
             .order_by(DialogueMessageRecord.id)
         )
-        return list(result.scalars().all())
+        rows = list(result.scalars().all())
+        assistants: list[DialogueMessageRecord] = []
+        for row in rows:
+            if row.role == "user":
+                break  # 进入下一轮次，停止
+            if row.role == "assistant":
+                assistants.append(row)
+        return assistants
 
     async def add_message(
         self,
