@@ -36,6 +36,8 @@ class SessionCache:
 
     student_id: int | None = None
     student_profile: dict | None = None
+    # 最近一次进度查询的班次（供「考试分数」等机器人邀请的追问复用）
+    last_cohort: dict | None = None
 
 
 @dataclass

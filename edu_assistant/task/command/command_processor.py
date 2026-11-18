@@ -47,8 +47,13 @@ class CommandProcessor:
             if flow is None:
                 logger.warning("start_flow 引用未知流程: %s", command.flow)
                 return None
+            active = state.tasks.active
+            # 相同流程已在进行：视为继续当前任务，不重复压栈切换
+            if active is not None and active.flow_id == flow.id:
+                logger.info("start_flow 目标与活跃任务相同，视为继续: %s", flow.id)
+                return None
             # 任务切换：当前有活跃任务时自动压栈（4.3 节语义）
-            if state.tasks.active is not None and len(state.tasks.paused) >= self.max_paused:
+            if active is not None and len(state.tasks.paused) >= self.max_paused:
                 logger.warning("暂停栈已满，拒绝 start_flow")
                 return None
             task = TaskInstance(

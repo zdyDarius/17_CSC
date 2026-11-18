@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from edu_assistant.api.chat_router import router as chat_router
 from edu_assistant.api.dependencies import init_engine_components
+from edu_assistant.api.demo_router import router as demo_router
 from edu_assistant.api.session_router import router as session_router
 from edu_assistant.conf.config import get_settings
 from edu_assistant.repository.orm.models import init_tables
@@ -67,6 +68,7 @@ def create_app() -> FastAPI:
 
     app.include_router(session_router)
     app.include_router(chat_router)
+    app.include_router(demo_router)
 
     @app.get("/health")
     async def health() -> dict:

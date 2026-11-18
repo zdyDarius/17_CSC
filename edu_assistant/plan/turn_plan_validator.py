@@ -75,44 +75,60 @@ class TurnPlanValidator:
         if not task.commands:
             return TurnPlanValidationResult(False, ClarifyReason.MISSING_TASK_COMMANDS)
 
+        active = state.tasks.active
         has_start = False
         saw_other = False
+        # start_flow 在本计划中声明的目标流程：其后同一计划内的 set_slots 对准它校验
+        pending_flow = None
         for command in task.commands:
             if isinstance(command, UnknownCommand):
                 logger.warning("未知命令: %r", command.command)
                 return TurnPlanValidationResult(False, ClarifyReason.INVALID_TASK_COMMAND)
             if isinstance(command, StartFlowCommand):
                 if has_start or saw_other:
+                    logger.warning("start_flow 位置非法或重复: %s", command.flow)
                     return TurnPlanValidationResult(False, ClarifyReason.INVALID_TASK_COMMAND)
                 has_start = True
                 if command.flow not in catalog.flows:
+                    logger.warning("start_flow 引用不存在的流程: %r", command.flow)
                     return TurnPlanValidationResult(False, ClarifyReason.INVALID_TASK_COMMAND)
-            else:
-                saw_other = True
+                pending_flow = catalog.flows[command.flow]
+                continue
 
-        active = state.tasks.active
-        for command in task.commands:
+            saw_other = True
             if isinstance(command, SetSlotsCommand):
-                if active is None and not has_start:
+                if pending_flow is not None:
+                    target_flow = pending_flow  # start_flow + set_slots：补槽目标是新流程
+                elif active is not None:
+                    target_flow = catalog.flows.get(active.flow_id)
+                else:
+                    logger.warning("set_slots 无活跃任务且无 start_flow")
                     return TurnPlanValidationResult(False, ClarifyReason.INVALID_TASK_COMMAND)
-                if active is None:
-                    # start_flow 之后的 set_slots：目标流程的槽位在命令执行后校验
-                    continue
-                flow = catalog.flows.get(active.flow_id)
-                if flow is None:
+                if target_flow is None:
+                    logger.warning(
+                        "set_slots 目标流程缺失: active=%s",
+                        active.flow_id if active else None,
+                    )
                     return TurnPlanValidationResult(False, ClarifyReason.INVALID_TASK_COMMAND)
-                result = self._validate_slots(command, flow)
+                result = self._validate_slots(command, target_flow)
                 if result is not None:
                     return result
             if isinstance(command, ResumeTaskCommand):
                 target_ids = {t.task_id for t in state.tasks.paused}
                 if command.task_id not in target_ids:
+                    logger.warning(
+                        "resume_task 目标不在暂停栈: %r 暂停栈=%s",
+                        command.task_id, [t.task_id for t in state.tasks.paused],
+                    )
                     return TurnPlanValidationResult(False, ClarifyReason.INVALID_TASK_COMMAND)
             if isinstance(command, CancelTaskCommand):
                 target_ids = {t.task_id for t in state.tasks.paused}
                 if active is not None:
                     target_ids.add(active.task_id)
                 if command.task_id not in target_ids:
+                    logger.warning(
+                        "cancel_task 目标不存在: %r", command.task_id
+                    )
                     return TurnPlanValidationResult(False, ClarifyReason.INVALID_TASK_COMMAND)
 
         # start_flow 时暂停栈已满 → 澄清

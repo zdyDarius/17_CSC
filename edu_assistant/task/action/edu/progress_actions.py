@@ -18,6 +18,14 @@ ENROLL_STATUS_LABELS = {
 
 EXAM_KEYWORDS = ("考试", "分数", "成绩", "考了多少")
 
+EXAM_STATUS_LABELS = {
+    "not_started": "未开始",
+    "absent": "缺考",
+    "submitted": "已提交",
+    "graded": "已批改",
+    "pending": "待参加",
+}
+
 
 @register_action("action_select_cohort")
 class SelectCohortAction:
@@ -52,6 +60,33 @@ class SelectCohortAction:
                 "cohort_name": str(matched.get("cohort_name", "")),
             },
             clear_slots=["cohort_choice", "cohort_choices", "cohort_choices_text", "cohort_choice_invalid"],
+        )
+
+
+@register_action("action_prefill_cohort")
+class PrefillCohortAction:
+    """「考试分数」等追问：用户消息含考试关键词且本会话刚查过班次时，从会话缓存预填班次。
+
+    计划 4.2 的考试明细追问路径：机器人邀请的「考试分数」视为对最近查询班次的明确指代。
+    其他情况为无操作（流程照常收集班次名）。
+    """
+
+    async def run(self, ctx: ActionContext) -> ActionResult:
+        slots = ctx.slots
+        if slots.get("cohort_id") or slots.get("cohort_name"):
+            return ActionResult()  # 已有班次（用户消息直接给了）
+        user_text = (ctx.user_message.text or "") if ctx.user_message else ""
+        if not any(kw in user_text for kw in EXAM_KEYWORDS):
+            return ActionResult()
+        cached = ctx.state.session_cache.last_cohort or {}
+        if not cached.get("cohort_id"):
+            return ActionResult()
+        return ActionResult(
+            slots_update={
+                "cohort_id": int(cached["cohort_id"]),
+                "cohort_name": str(cached.get("cohort_name", "")),
+            },
+            clear_slots=["cohort_choice", "cohort_choices", "cohort_choices_text"],
         )
 
 
@@ -146,7 +181,8 @@ class ResolveCohortAction:
             if exams:
                 exam_lines = []
                 for ex in exams:
-                    status = ex.get("attemptStatus", "not_started")
+                    status_code = str(ex.get("attemptStatus", "not_started"))
+                    status = EXAM_STATUS_LABELS.get(status_code, status_code)
                     score = ex.get("scoreValue")
                     score_text = f"，得分 {score}" if score not in (None, "", "0.00") else ""
                     exam_lines.append(f"  · {ex.get('examName')}（{status}{score_text}）")
@@ -157,6 +193,11 @@ class ResolveCohortAction:
         else:
             lines.append("如需查看考试分数明细，请告诉我「考试分数」。")
 
+        # 会话级缓存最近查询的班次（供「考试分数」等机器人邀请的追问复用，计划 4.2）
+        ctx.state.session_cache.last_cohort = {
+            "cohort_id": cohort_id,
+            "cohort_name": cohort_name,
+        }
         return ActionResult(
             slots_update={
                 "cohort_id": cohort_id,

@@ -101,6 +101,35 @@ class DialogueEngine:
         # 2 严格校验
         validation = self.turn_plan_validator.validate(turn_plan, state, self.flow_catalog, user_message)
         if not validation.valid:
+            if validation.reason == ClarifyReason.MULTIPLE_TRACKS:
+                # 确定性仲裁（与规划 prompt 的优先级规则一致，消除多轨抖动死胡同）：
+                # - 任务进行中：知识插问优先，任务保留（计划 4.3）
+                # - 无进行中任务：存在可执行的 task 计划时业务流程优先（prompt 判断顺序 2）
+                if turn_plan.knowledge is not None and state.tasks.active is not None:
+                    messages = await self.knowledge_handler.handle(
+                        intents=turn_plan.knowledge.intents,
+                        state=state,
+                        user_message=user_message,
+                    )
+                    return TurnOutcome(
+                        messages=messages,
+                        track="knowledge",
+                        plan_summary=_plan_summary(turn_plan) + " → 插问仲裁",
+                        actions=turn_plan.knowledge.intents,
+                    )
+                if turn_plan.task is not None and turn_plan.task.commands:
+                    messages = await self.task_handler.handle(
+                        commands=turn_plan.task.commands,
+                        state=state,
+                        user_message=user_message,
+                        ctx_factory=self._ctx_factory,
+                    )
+                    return TurnOutcome(
+                        messages=messages,
+                        track="task",
+                        plan_summary=_plan_summary(turn_plan) + " → 任务优先仲裁",
+                        actions=[c.command for c in turn_plan.task.commands],
+                    )
             logger.info("计划校验失败: %s %s", validation.reason, validation.detail)
             messages = await self.clarify_response.response(
                 validation.reason or ClarifyReason.AMBIGUOUS_INPUT, state, user_message

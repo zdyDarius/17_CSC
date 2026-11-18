@@ -138,6 +138,31 @@ Intent 规则：
   "chitchat": null
 }
 
+用户说「我在考研数学冲刺模考班的学习进度怎么样」——开始学习进度查询并同时给出班次名，必须带上 set_slots：
+
+{
+  "task": {
+    "commands": [
+      {"command": "start_flow", "flow": "learning_progress_query"},
+      {"command": "set_slots", "slots": {"cohort_name": "考研数学冲刺模考班"}}
+    ]
+  },
+  "knowledge": null,
+  "chitchat": null
+}
+
+用户刚查过学习进度，机器人提示可以说「考试分数」看明细，用户接着说「考试分数」或「看一下我的考试分数」——这是查询班次的考试明细，属于学习进度查询流程（班次由系统沿用会话上下文，不要输出 set_slots）：
+
+{
+  "task": {
+    "commands": [
+      {"command": "start_flow", "flow": "learning_progress_query"}
+    ]
+  },
+  "knowledge": null,
+  "chitchat": null
+}
+
 ## 系统能力
 
 ### Flows

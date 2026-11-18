@@ -134,6 +134,12 @@ flows:
     steps:
       - id: start
         type: start
+        next: prefill_cohort
+
+      # 「考试分数」等追问：从会话缓存预填最近查询的班次（计划 4.2）
+      - id: prefill_cohort
+        type: action
+        action: action_prefill_cohort
         next: ask_cohort
 
       - id: ask_cohort

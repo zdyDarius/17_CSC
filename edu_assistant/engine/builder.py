@@ -29,6 +29,7 @@ from edu_assistant.task.task_handler import TaskHandler
 @dataclass
 class EngineComponents:
     engine: DialogueEngine
+    edu_client: EduDataClient
     order_item_adapter: OrderItemAdapter
     flow_catalog: object
 
@@ -92,6 +93,7 @@ def build_engine(settings: Settings | None = None) -> EngineComponents:
     )
     return EngineComponents(
         engine=engine,
+        edu_client=edu_client,
         order_item_adapter=order_item_adapter,
         flow_catalog=catalog,
     )

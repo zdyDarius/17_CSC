@@ -233,3 +233,35 @@ def test_from_dict_tolerates_extra_keys():
 def test_from_dict_rejects_unknown_command_name():
     cmd = Command.from_dict({"command": "do_magic", "flow": "x"})
     assert type(cmd).__name__ == "UnknownCommand"
+
+
+def test_set_slots_targets_start_flow_not_active_task(validator, state, catalog):
+    """start_flow + set_slots：槽位应对新流程校验，而非当前活跃任务（E2E 发现的缺陷）。"""
+    # 活跃任务改为退款（等订单号），不含 cohort_name 槽位
+    state.tasks.active = TaskInstance(
+        flow_id="refund_request", flow_name="退款申请", step_id="ask_order_no", slots={}
+    )
+    plan = TurnPlan(
+        task=TaskTurnPlan(
+            commands=[
+                StartFlowCommand(command="start_flow", flow="learning_progress_query"),
+                SetSlotsCommand(command="set_slots", slots={"cohort_name": "考研数学冲刺模考班"}),
+            ]
+        )
+    )
+    result = validator.validate(plan, state, catalog)
+    assert result.valid, f"应通过: {result.reason}"
+
+
+def test_set_slots_against_active_task_undeclared_slot_rejected(validator, state, catalog):
+    """无 start_flow 时，set_slots 仍对活跃任务校验：未声明槽位拒绝。"""
+    state.tasks.active = TaskInstance(
+        flow_id="refund_request", flow_name="退款申请", step_id="ask_order_no", slots={}
+    )
+    plan = TurnPlan(
+        task=TaskTurnPlan(
+            commands=[SetSlotsCommand(command="set_slots", slots={"cohort_name": "x"})]
+        )
+    )
+    result = validator.validate(plan, state, catalog)
+    assert not result.valid and result.reason == ClarifyReason.INVALID_TASK_COMMAND

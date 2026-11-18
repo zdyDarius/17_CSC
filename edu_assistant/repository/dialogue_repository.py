@@ -73,6 +73,7 @@ def state_from_json(raw: str, sender_id: str, session_id: str) -> DialogueState:
         session_cache=SessionCache(
             student_id=cache_raw.get("student_id"),
             student_profile=cache_raw.get("student_profile"),
+            last_cohort=cache_raw.get("last_cohort"),
         ),
         tasks=tasks,
         focused_object=focused,

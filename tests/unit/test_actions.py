@@ -182,3 +182,32 @@ def test_start_refund_for_ticket_auto_commands():
     assert result.resume_step_id == "check_refund"
     assert [c.command for c in result.auto_commands] == ["start_flow", "set_slots"]
     assert result.auto_commands[1].slots["order_no"] == "ORD20240401005"
+
+
+# —— 考试分数追问：会话缓存预填班次（计划 4.2） ——
+
+def test_prefill_cohort_from_session_cache():
+    import edu_assistant.task.action.edu.progress_actions  # noqa: F401
+
+    ctx = make_ctx({})
+    ctx.user_message.text = "考试分数"
+    ctx.state.session_cache.last_cohort = {"cohort_id": 7252, "cohort_name": "高中化学原理突破班"}
+    result = asyncio.run(get_action("action_prefill_cohort").run(ctx))
+    assert result.slots_update["cohort_id"] == 7252
+    assert result.slots_update["cohort_name"] == "高中化学原理突破班"
+
+
+def test_prefill_cohort_noop_without_cache_or_keyword():
+    import edu_assistant.task.action.edu.progress_actions  # noqa: F401
+
+    # 无缓存 → 不填
+    ctx = make_ctx({})
+    ctx.user_message.text = "考试分数"
+    result = asyncio.run(get_action("action_prefill_cohort").run(ctx))
+    assert result.slots_update == {}
+    # 有缓存但消息不含考试关键词 → 不填
+    ctx2 = make_ctx({})
+    ctx2.user_message.text = "帮我查下订单"
+    ctx2.state.session_cache.last_cohort = {"cohort_id": 7252, "cohort_name": "x"}
+    result2 = asyncio.run(get_action("action_prefill_cohort").run(ctx2))
+    assert result2.slots_update == {}
