@@ -198,7 +198,6 @@ def test_sse_matches_non_stream():
     with _client() as client:
         session = _new_session(client)
         mid = f"e2e-sse-{uuid.uuid4().hex[:12]}"
-        non_stream = _chat(client, session, "平台怎么查看作业成绩", message_id=f"{mid}-ns")
         events: list[tuple[str, dict]] = []
         with client.stream(
             "POST",
@@ -219,11 +218,26 @@ def test_sse_matches_non_stream():
         assert "meta" in names and "delta" in names and "done" in names
         deltas = "".join(d.get("text", "") for e, d in events if e == "delta")
         assert len(deltas) > 0
-        # SSE 最终完整回复与非流式同源（同一 service 处理链路）
+        # 一致性：done 携带的完整回复 == 历史中持久化的同消息回复（只落库一次）
         done_payload = next(d for e, d in events if e == "done")
         sse_texts = [m.get("text") for m in done_payload.get("messages", [])]
-        ns_texts = [m.get("text") for m in non_stream.get("messages", [])]
-        assert sse_texts == ns_texts
+        history = client.get(
+            f"/api/sessions/{session}/history", headers={"X-User-Id": USER}
+        ).json()["messages"]
+        sse_user_idx = next(
+            i for i, m in enumerate(history) if m.get("clientMessageId") == f"{mid}-sse"
+        )
+        persisted = [
+            m.get("text")
+            for m in history[sse_user_idx + 1 :]
+            if m.get("role") == "assistant"
+        ]
+        assert sse_texts == persisted
+        # 非流式重放同一 messageId：防重生效（duplicated=true），结果与首次一致
+        # （同一 messageId 已被 SSE 处理过，重放返回持久化内容）
+        replay = _chat(client, session, "那报名流程呢", message_id=f"{mid}-sse")
+        assert replay["duplicated"] is True
+        assert [m.get("text") for m in replay.get("messages", [])] == sse_texts
 
 
 # ============ 会话持久化：历史与状态接口 + 越权防护 ============

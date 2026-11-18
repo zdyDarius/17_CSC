@@ -9,6 +9,7 @@ from edu_assistant.domain.state import DialogueState, TaskInstance
 from edu_assistant.knowledge.intents import intents_catalog
 from edu_assistant.plan.command import (
     CancelTaskCommand,
+    Command,
     ResumeTaskCommand,
     SetSlotsCommand,
     StartFlowCommand,
@@ -215,3 +216,20 @@ def test_object_type_whitelist():
     result = validate_object_message(DialogueState(sender_id="1001"), msg)
     assert not result.valid
     assert result.reason == ClarifyReason.OBJECT_TYPE_MISMATCH
+
+
+# —— Command.from_dict 对 LLM 输出的容错 ——
+
+def test_from_dict_tolerates_extra_keys():
+    """命令名合法但带 LLM 附带的多余字段时，应取声明字段而非整体作废。"""
+    cmd = Command.from_dict(
+        {"command": "start_flow", "flow": "order_status_query", "flow_name": "订单状态查询", "reason": "用户要查订单"}
+    )
+    assert isinstance(cmd, StartFlowCommand)
+    assert cmd.command == "start_flow"
+    assert cmd.flow == "order_status_query"
+
+
+def test_from_dict_rejects_unknown_command_name():
+    cmd = Command.from_dict({"command": "do_magic", "flow": "x"})
+    assert type(cmd).__name__ == "UnknownCommand"
