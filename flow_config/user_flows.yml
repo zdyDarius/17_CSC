@@ -99,7 +99,8 @@ flows:
   # ============ 退款进度查询 ============
   refund_status_query:
     name: 退款进度查询
-    description: 查询学员已提交退款申请的审批进度与状态，可按 RF 编号查。不是发起新退款。
+    description: 查询学员已提交退款申请的审批进度与状态，可按 RF 编号查（槽位 refund_no）。不是发起新退款。
+    use_slots: [refund_no]
     steps:
       - id: start
         type: start
@@ -132,7 +133,8 @@ flows:
   # ============ 工单进度查询 ============
   ticket_status_query:
     name: 工单进度查询
-    description: 查询学员已提交工单的处理进度与状态，可按 TK 编号查。不是提交新工单。
+    description: 查询学员已提交工单的处理进度与状态，可按 TK 编号查（槽位 ticket_no）。不是提交新工单。
+    use_slots: [ticket_no]
     steps:
       - id: start
         type: start

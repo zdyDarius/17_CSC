@@ -112,3 +112,25 @@ def test_bad_condition_rejected(tmp_path):
     )
     with pytest.raises(FlowDefinitionError):
         FlowLoader().load(write_yaml(tmp_path, bad), registered_action_names())
+
+
+def test_use_slots_declared_and_validated(tmp_path):
+    """流程级 use_slots：合并进流程槽位（供 set_slots/规划器），未声明引用即拒绝。"""
+    yaml_text = """
+    slots:
+      order_no: {type: text, label: 订单号}
+    flows:
+      extra_flow:
+        name: 额外流程
+        use_slots: [order_no]
+        steps:
+          - {id: start, type: start, next: act}
+          - {id: act, type: action, action: action_resolve_order, next: end}
+          - {id: end, type: end, next: []}
+"""
+    catalog = FlowLoader().load(write_yaml(tmp_path, yaml_text), registered_action_names())
+    assert "order_no" in catalog.flows["extra_flow"].slots
+    # 引用未声明槽位 → 启动失败
+    bad = yaml_text.replace("use_slots: [order_no]", "use_slots: [ghost_slot]")
+    with pytest.raises(FlowDefinitionError):
+        FlowLoader().load(write_yaml(tmp_path, bad), registered_action_names())

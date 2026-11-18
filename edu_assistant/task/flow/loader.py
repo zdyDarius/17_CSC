@@ -137,6 +137,16 @@ class FlowLoader:
                         f"流程 {flow_id} 步骤 {step.id} 跳转到不存在的步骤: {link.target}"
                     )
 
+        # 流程级 use_slots 声明：无 collect 步骤也可声明的读取槽位
+        # （如查询流程的可选过滤槽，供 set_slots 与规划器使用）
+        for name in (flow_data.get("use_slots") or []):
+            name = str(name)
+            if name not in slots:
+                raise FlowDefinitionError(
+                    f"流程 {flow_id} use_slots 引用未声明槽位: {name!r}"
+                )
+            used_slots[name] = slots[name]
+
         return Flow(
             id=flow_id,
             name=str(flow_data.get("name", flow_id)),
