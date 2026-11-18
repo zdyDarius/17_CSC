@@ -1,0 +1,462 @@
+# 教育行业智能客服 · 流程定义
+# 步骤类型：start / collect / action / response / end
+# 确认步骤通过带选项的 collect 实现；条件跳转使用白名单表达式（禁止 eval）。
+
+slots:
+  # —— 订单查询 ——
+  order_no:
+    type: text
+    label: 订单号
+    description: 用户可见订单号，形如 ORD20240401005
+  order_id:
+    type: int
+    label: 订单内部ID
+    description: 由系统解析，不由用户填写
+  order_status_text:
+    type: text
+    label: 订单状态
+  order_summary:
+    type: text
+    label: 订单摘要
+  # —— 明细选择（退款/工单） ——
+  order_items:
+    type: json
+    label: 订单明细列表
+  order_item_count:
+    type: int
+    label: 明细数量
+  order_item_id:
+    type: int
+    label: 选中的订单明细ID
+  order_item_name:
+    type: text
+    label: 选中的明细名称
+  order_item_status:
+    type: text
+    label: 选中的明细状态
+  order_item_choice:
+    type: text
+    label: 明细选择
+    description: 多明细时用户回复的序号或名称
+  # —— 学习进度 ——
+  cohort_name:
+    type: text
+    label: 班次名称
+  cohort_id:
+    type: int
+    label: 班次内部ID
+  cohort_choice:
+    type: text
+    label: 班次选择
+  progress_summary:
+    type: text
+    label: 进度摘要
+  # —— 退款 ——
+  refund_reason:
+    type: text
+    label: 退款原因
+  refund_type:
+    type: enum
+    label: 退款类型
+    choices: [personal_reason, course_unsatisfied, schedule_conflict, duplicate_purchase]
+  refund_amount:
+    type: text
+    label: 退款金额
+  confirm_refund:
+    type: text
+    label: 退款确认
+  refund_request_id:
+    type: int
+    label: 退款申请ID
+  refund_no:
+    type: text
+    label: 退款编号
+  # —— 工单 ——
+  ticket_type:
+    type: enum
+    label: 工单类型
+    choices: [after_sales, complaint, refund]
+  issue_description:
+    type: text
+    label: 问题描述
+  confirm_ticket:
+    type: text
+    label: 工单确认
+  ticket_no:
+    type: text
+    label: 工单编号
+
+flows:
+  # ============ 订单状态查询 ============
+  order_status_query:
+    name: 订单状态查询
+    description: 帮学员查询订单状态、金额、支付情况与报名课程。
+    steps:
+      - id: start
+        type: start
+        next: ask_order_no
+
+      - id: ask_order_no
+        type: collect
+        slot_name: order_no
+        template:
+          text: "请告诉我你要查询的订单号（形如 ORD 开头）。"
+        next: resolve_order
+
+      - id: resolve_order
+        type: action
+        action: action_resolve_order
+        next:
+          - if: "slots.resolve_failed"
+            then: resolve_error
+          - else: show_order
+
+      - id: show_order
+        type: response
+        template:
+          text: "{{ slots.order_summary }}"
+        next: end
+
+      - id: resolve_error
+        type: response
+        template:
+          text: "{{ slots.resolve_failed }}"
+        next: end
+
+      - id: end
+        type: end
+        next: []
+
+  # ============ 学习进度查询 ============
+  learning_progress_query:
+    name: 学习进度查询
+    description: 帮学员查询班次的考勤、视频、作业、考试等多维度学习进度。
+    steps:
+      - id: start
+        type: start
+        next: ask_cohort
+
+      - id: ask_cohort
+        type: collect
+        slot_name: cohort_name
+        template:
+          text: "请告诉我你想查询的班次名称（如「Python 全栈第5期」），或回复你报名的课程名。"
+        next: resolve_cohort
+
+      - id: resolve_cohort
+        type: action
+        action: action_resolve_cohort
+        next:
+          - if: "slots.resolve_failed"
+            then: resolve_error
+          - if: "slots.cohort_choices"
+            then: ask_cohort_choice
+          - else: show_progress
+
+      - id: ask_cohort_choice
+        type: collect
+        slot_name: cohort_choice
+        template:
+          text: "匹配到多个班次，请回复序号选择：\n{{ slots.cohort_choices_text }}"
+        next: select_cohort
+
+      - id: select_cohort
+        type: action
+        action: action_select_cohort
+        next:
+          - if: "slots.cohort_id"
+            then: re_resolve_cohort
+          - else: ask_cohort_choice
+
+      - id: re_resolve_cohort
+        type: action
+        action: action_resolve_cohort
+        next:
+          - if: "slots.resolve_failed"
+            then: resolve_error
+          - else: show_progress
+
+      - id: show_progress
+        type: response
+        template:
+          text: "{{ slots.progress_summary }}"
+        next: end
+
+      - id: resolve_error
+        type: response
+        template:
+          text: "{{ slots.resolve_failed }}"
+        next: end
+
+      - id: end
+        type: end
+        next: []
+
+  # ============ 退款申请 ============
+  refund_request:
+    name: 退款申请
+    description: 帮学员对订单明细发起全额退款申请：订单号 → 选择明细 → 原因 → 类型 → 确认 → 提交。
+    steps:
+      - id: start
+        type: start
+        next: ask_order_no
+
+      - id: ask_order_no
+        type: collect
+        slot_name: order_no
+        template:
+          text: "请告诉我要退款的订单号（形如 ORD 开头）。"
+        next: resolve_order
+
+      - id: resolve_order
+        type: action
+        action: action_resolve_order_for_write
+        next:
+          - if: "slots.resolve_failed"
+            then: resolve_error
+          - if: "slots.order_item_id"
+            then: ask_refund_reason
+          - else: ask_which_item
+
+      - id: ask_which_item
+        type: collect
+        slot_name: order_item_choice
+        template:
+          text: "该订单包含多个报名明细，请回复序号选择要退款的班次：\n{{ slots.order_item_choices_text }}"
+        next: select_item
+
+      - id: select_item
+        type: action
+        action: action_select_order_item
+        next:
+          - if: "slots.resolve_failed"
+            then: resolve_error
+          - if: "slots.order_item_id"
+            then: ask_refund_reason
+          - else: ask_which_item
+
+      - id: ask_refund_reason
+        type: collect
+        slot_name: refund_reason
+        template:
+          text: "请简单说明退款原因（如：时间安排冲突，无法继续学习）。"
+        next: ask_refund_type
+
+      - id: ask_refund_type
+        type: collect
+        slot_name: refund_type
+        options: [personal_reason, course_unsatisfied, schedule_conflict, duplicate_purchase]
+        template:
+          text: "请选择退款类型（回复序号或名称）：\n1 个人原因\n2 课程不满意\n3 时间冲突\n4 重复购买"
+        next: normalize_refund_type
+
+      - id: normalize_refund_type
+        type: action
+        action: action_normalize_refund_type
+        next:
+          - if: "slots.refund_type"
+            then: preview_refund
+          - else: ask_refund_type
+
+      - id: preview_refund
+        type: action
+        action: action_preview_refund
+        next:
+          - if: "slots.refund_not_allowed"
+            then: refund_not_allowed
+          - if: "slots.resolve_failed"
+            then: resolve_error
+          - else: ask_confirm_refund
+
+      - id: ask_confirm_refund
+        type: collect
+        slot_name: confirm_refund
+        options: ["确认", "取消"]
+        template:
+          text: "{{ slots.refund_preview_text }}"
+        next: submit_refund
+
+      - id: submit_refund
+        type: action
+        action: action_submit_refund
+        next:
+          - if: "slots.refund_no"
+            then: refund_success
+          - if: "slots.refund_cancelled"
+            then: refund_cancelled
+          - if: "slots.refund_error"
+            then: refund_error
+          - if: "slots.confirm_invalid"
+            then: ask_confirm_refund
+          - else: refund_error
+
+      - id: refund_success
+        type: response
+        template:
+          text: "退款申请已提交成功！\n- 退款编号：{{ slots.refund_no }}\n- 退款金额：¥{{ slots.refund_amount }}\n- 当前状态：待审批\n审批结果将以消息通知你；如需催促处理，可以提交退款类工单，我会帮你跟进。"
+        next: end
+
+      - id: refund_cancelled
+        type: response
+        template:
+          text: "好的，已为你取消本次退款申请，未做任何退款操作。"
+        next: end
+
+      - id: refund_error
+        type: response
+        template:
+          text: "{{ slots.refund_error }}"
+        next: end
+
+      - id: refund_not_allowed
+        type: response
+        template:
+          text: "{{ slots.refund_not_allowed }}"
+        next: end
+
+      - id: resolve_error
+        type: response
+        template:
+          text: "{{ slots.resolve_failed }}"
+        next: end
+
+      - id: end
+        type: end
+        next: []
+
+  # ============ 工单提交 ============
+  ticket_submit:
+    name: 工单提交
+    description: 帮学员提交售后/投诉/退款类工单；退款类工单必须关联已有退款申请。
+    steps:
+      - id: start
+        type: start
+        next: ask_ticket_type
+
+      - id: ask_ticket_type
+        type: collect
+        slot_name: ticket_type
+        options: [after_sales, complaint, refund]
+        template:
+          text: "请选择工单类型（回复序号或名称）：\n1 售后咨询\n2 投诉反馈\n3 退费申请"
+        next: normalize_ticket_type
+
+      - id: normalize_ticket_type
+        type: action
+        action: action_normalize_ticket_type
+        next:
+          - if: "slots.ticket_type"
+            then: ask_order_no
+          - else: ask_ticket_type
+
+      - id: ask_order_no
+        type: collect
+        slot_name: order_no
+        template:
+          text: "请告诉我关联的订单号（形如 ORD 开头）。"
+        next: resolve_order
+
+      - id: resolve_order
+        type: action
+        action: action_resolve_order_for_write
+        next:
+          - if: "slots.resolve_failed"
+            then: resolve_error
+          - if: "slots.order_item_id"
+            then: check_refund
+          - else: ask_which_item
+
+      - id: ask_which_item
+        type: collect
+        slot_name: order_item_choice
+        template:
+          text: "该订单包含多个报名明细，请回复序号选择关联的班次：\n{{ slots.order_item_choices_text }}"
+        next: select_item
+
+      - id: select_item
+        type: action
+        action: action_select_order_item
+        next:
+          - if: "slots.resolve_failed"
+            then: resolve_error
+          - if: "slots.order_item_id"
+            then: check_refund
+          - else: ask_which_item
+
+      - id: check_refund
+        type: action
+        action: action_check_refund_for_ticket
+        next:
+          - if: "slots.resolve_failed"
+            then: resolve_error
+          - if: "slots.ticket_type == \"refund\" and not slots.refund_request_id"
+            then: start_refund_first
+          - else: ask_description
+
+      - id: start_refund_first
+        type: action
+        action: action_start_refund_for_ticket
+        next: paused_notice
+
+      - id: paused_notice
+        type: response
+        template:
+          text: "{{ slots.paused_for_refund_text }}"
+        next: end
+
+      - id: ask_description
+        type: collect
+        slot_name: issue_description
+        template:
+          text: "请描述你遇到的问题（会作为工单内容，请尽量具体，如：第三章视频一直加载不出来）。"
+        next: ask_confirm_ticket
+
+      - id: ask_confirm_ticket
+        type: collect
+        slot_name: confirm_ticket
+        options: ["确认", "取消"]
+        template:
+          text: "请确认工单信息：\n- 工单类型：{{ slots.ticket_type_label }}\n- 订单：{{ slots.order_no_confirmed }}\n- 报名明细：{{ slots.order_item_name }}{% if slots.existing_refund_text %}\n- 退款关联：{{ slots.existing_refund_text }}{% endif %}\n- 问题描述：{{ slots.issue_description }}\n回复「确认」提交工单，「取消」放弃。"
+        next: submit_ticket
+
+      - id: submit_ticket
+        type: action
+        action: action_submit_ticket
+        next:
+          - if: "slots.ticket_no"
+            then: ticket_success
+          - if: "slots.ticket_cancelled"
+            then: ticket_cancelled
+          - if: "slots.ticket_error"
+            then: ticket_error
+          - if: "slots.confirm_invalid"
+            then: ask_confirm_ticket
+          - else: ticket_error
+
+      - id: ticket_success
+        type: response
+        template:
+          text: "工单已提交成功！\n- 工单编号：{{ slots.ticket_no }}\n- 当前状态：待处理\n客服人员将尽快跟进处理，处理结果会通过消息通知你。"
+        next: end
+
+      - id: ticket_cancelled
+        type: response
+        template:
+          text: "好的，已取消本次工单提交，未创建工单。"
+        next: end
+
+      - id: ticket_error
+        type: response
+        template:
+          text: "{{ slots.ticket_error }}"
+        next: end
+
+      - id: resolve_error
+        type: response
+        template:
+          text: "{{ slots.resolve_failed }}"
+        next: end
+
+      - id: end
+        type: end
+        next: []
