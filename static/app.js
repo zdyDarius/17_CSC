@@ -136,6 +136,12 @@ function renderResult(data, mode) {
     addBot(m.text || "（无文本回复）", meta, data.degraded);
   });
   if (!data.messages || !data.messages.length) addBot("（无回复）", null, true);
+  refreshContextIfNeeded(data.track);
+}
+
+/* 任务轨道可能产生业务写入（退款/工单/查询缓存），结束后刷新学籍卡 */
+function refreshContextIfNeeded(track) {
+  if (track === "task" && state.sessionId) loadContext();
 }
 
 /* ============ SSE ============ */
@@ -190,6 +196,7 @@ async function sendStream(text, messageId) {
           bubble.querySelector(".meta").textContent =
             `${track} · ${requestId.slice(0, 8)} · ${payload.messageCount} 条消息已持久化`;
         }
+        refreshContextIfNeeded(track);
       } else if (event === "error") {
         addBot("处理失败：" + (payload.error || ""), null, true);
       }
