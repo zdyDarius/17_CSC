@@ -96,7 +96,7 @@ def test_learning_progress_query():
 
 
 def test_refund_flow_end_to_end():
-    """退款全流程：订单号 → 原因 → 类型 → 确认 → 提交。
+    """退款全流程：订单号 → 直接选类型（原因由原话/类型名生成）→ 确认 → 提交。
 
     兼容两种正确结果：提交成功（退款编号）；或业务库已有该明细的
     处理中退款申请（防重复退款，来自历史 E2E/演示操作）。
@@ -106,10 +106,10 @@ def test_refund_flow_end_to_end():
         r1 = _chat(client, session, "我要退款")
         assert "订单号" in _bot_text(r1)
         _chat(client, session, DEMO_ORDER_NO)
-        _chat(client, session, "没时间学了")
-        r4 = _chat(client, session, "1")  # 个人原因
-        text4 = _bot_text(r4)
-        assert "退款金额" in text4 or "¥" in text4
+        r3 = _chat(client, session, "时间安排冲突，无法继续学习")  # 直接作为类型输入
+        text3 = _bot_text(r3)
+        assert "退款金额" in text3 or "¥" in text3, text3[:200]
+        assert "退款原因" in text3  # 原话进入确认页
         r5 = _chat(client, session, "确认")
         text5 = _bot_text(r5)
         success = "退款编号" in text5

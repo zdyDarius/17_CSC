@@ -77,11 +77,11 @@ def ctx_factory(state, user_message) -> ActionContext:
 def test_end_auto_resumes_top_paused_task(catalog):
     """新任务完成后自动弹出栈顶并从保存步骤继续（4.3 恢复语义）。"""
     state = DialogueState(sender_id="1001", session_id="s")
-    # 任务 A：退款流程，收集完 order_no 停在 ask_refund_reason（等待原因输入）
+    # 任务 A：退款流程，收集完 order_no 停在 ask_refund_type（等待类型选择）
     task_a = TaskInstance(
         flow_id="refund_request",
         flow_name="退款申请",
-        step_id="ask_refund_reason",
+        step_id="ask_refund_type",
         slots={"order_no": "ORD20240401005", "refund_reason": "时间冲突"},
     )
     state.tasks.active = task_a
@@ -108,7 +108,7 @@ def test_end_auto_resumes_top_paused_task(catalog):
     assert state.tasks.paused == []
     # 恢复提示出现（继续刚才的「退款申请」）
     assert any("继续刚才" in m.text for m in messages)
-    # A 的流程继续推进到 ask_refund_reason → 追问退款原因（refund_reason 已有 → 继续到 ask_refund_type）
+    # A 的流程继续推进：ask_refund_type → 追问退款类型（refund_reason 已有 → 继续到类型选择）
     assert "退款类型" in messages[-1].text or any("退款类型" in m.text for m in messages)
 
 

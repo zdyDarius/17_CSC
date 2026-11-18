@@ -211,3 +211,25 @@ def test_prefill_cohort_noop_without_cache_or_keyword():
     ctx2.state.session_cache.last_cohort = {"cohort_id": 7252, "cohort_name": "x"}
     result2 = asyncio.run(get_action("action_prefill_cohort").run(ctx2))
     assert result2.slots_update == {}
+
+
+
+# —— 退款原因自动生成（类型选择时用户原话 → API 必填原因） ——
+
+def test_normalize_refund_type_captures_reason_from_raw_words():
+    import edu_assistant.task.action.edu.refund_actions  # noqa: F401
+
+    ctx = make_ctx({"refund_type_raw": "时间安排冲突，无法继续学习"})
+    result = asyncio.run(get_action("action_normalize_refund_type").run(ctx))
+    assert result.slots_update["refund_type"] == "schedule_conflict"
+    # 用户原话比类型名具体 → 作为原因落库
+    assert result.slots_update["refund_reason"] == "时间安排冲突，无法继续学习"
+
+
+def test_normalize_refund_type_reason_falls_back_to_label():
+    import edu_assistant.task.action.edu.refund_actions  # noqa: F401
+
+    ctx = make_ctx({"refund_type_raw": "3"})
+    result = asyncio.run(get_action("action_normalize_refund_type").run(ctx))
+    assert result.slots_update["refund_type"] == "schedule_conflict"
+    assert result.slots_update["refund_reason"] == "时间冲突"

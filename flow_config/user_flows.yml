@@ -221,7 +221,7 @@ flows:
           - if: "slots.resolve_failed"
             then: resolve_error
           - if: "slots.order_item_id"
-            then: ask_refund_reason
+            then: ask_refund_type
           - else: ask_which_item
 
       - id: ask_which_item
@@ -238,22 +238,16 @@ flows:
           - if: "slots.resolve_failed"
             then: resolve_error
           - if: "slots.order_item_id"
-            then: ask_refund_reason
+            then: ask_refund_type
           - else: ask_which_item
 
-      - id: ask_refund_reason
-        type: collect
-        slot_name: refund_reason
-        template:
-          text: "请简单说明退款原因（如：时间安排冲突，无法继续学习）。"
-        next: ask_refund_type
-
+      # 直接选择退款类型；原因由用户原话/类型名自动生成（API 必填字段）
       - id: ask_refund_type
         type: collect
         slot_name: refund_type
         options: [personal_reason, course_unsatisfied, schedule_conflict, duplicate_purchase]
         template:
-          text: "请选择退款类型（回复序号或名称）：\n1 个人原因\n2 课程不满意\n3 时间冲突\n4 重复购买"
+          text: "请选择退款类型（回复序号或名称，也可以直接说明原因）：\n1 个人原因\n2 课程不满意\n3 时间冲突\n4 重复购买"
         next: normalize_refund_type
 
       - id: normalize_refund_type

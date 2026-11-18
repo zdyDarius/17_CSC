@@ -19,7 +19,7 @@ def make_state() -> DialogueState:
     task = TaskInstance(
         flow_id="refund_request",
         flow_name="退款申请",
-        step_id="ask_refund_reason",
+        step_id="ask_refund_type",
         task_id="t-1",
         slots={"order_no": "ORD20240401005", "order_item_id": 12},
         wait_refund_link=False,

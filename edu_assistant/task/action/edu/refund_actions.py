@@ -31,6 +31,7 @@ REFUND_TYPE_ALIASES = {
     "不适合": "course_unsatisfied",
     "schedule_conflict": "schedule_conflict",
     "时间冲突": "schedule_conflict",
+    "安排冲突": "schedule_conflict",
     "档期冲突": "schedule_conflict",
     "排课冲突": "schedule_conflict",
     "duplicate_purchase": "duplicate_purchase",
@@ -64,15 +65,35 @@ def _map_alias(raw: str, aliases: dict[str, str]) -> str | None:
 
 @register_action("action_normalize_refund_type")
 class NormalizeRefundTypeAction:
-    """退款类型归一：LLM 输出或用户中文 → 固定枚举；无法映射时清空重问。"""
+    """退款类型归一：LLM 输出或用户中文 → 固定枚举；无法映射时清空重问。
+
+    原因字段（API 必填）同步生成：用户原话比类型名更具体时用原话，否则用类型名。
+    """
 
     async def run(self, ctx: ActionContext) -> ActionResult:
         raw = str(ctx.slots.get("refund_type_raw", "") or ctx.slots.get("refund_type", "") or "").strip()
         if not raw:
             return ActionResult(clear_slots=["refund_type"])
-        mapped = _map_alias(raw, REFUND_TYPE_ALIASES)
+        index_map = {
+            "1": "personal_reason",
+            "2": "course_unsatisfied",
+            "3": "schedule_conflict",
+            "4": "duplicate_purchase",
+        }
+        mapped = index_map.get(raw) or _map_alias(raw, REFUND_TYPE_ALIASES)
         if mapped:
-            return ActionResult(slots_update={"refund_type": mapped}, clear_slots=["refund_type_raw"])
+            label = REFUND_TYPE_LABELS.get(mapped, mapped)
+            # 原因：用户原话（非序号/非枚举名且更长）→ 原话；否则用类型名
+            reason = label
+            if raw and not raw.isdigit() and raw.lower() != mapped and len(raw) > len(label):
+                reason = raw
+            return ActionResult(
+                slots_update={
+                    "refund_type": mapped,
+                    "refund_reason": reason,
+                },
+                clear_slots=["refund_type_raw"],
+            )
         return ActionResult(
             clear_slots=["refund_type", "refund_type_raw"],
             slots_update={"refund_type_invalid": "请从以下类型中选择：1 个人原因、2 课程不满意、3 时间冲突、4 重复购买（回复序号或名称）。"},
@@ -113,6 +134,8 @@ class PreviewRefundAction:
 
         amount = str(matched.get("payable_amount", "0"))
         refund_type = REFUND_TYPE_LABELS.get(str(slots.get("refund_type", "")), str(slots.get("refund_type", "")))
+        reason = str(slots.get("refund_reason", "") or "").strip()
+        reason_line = f"- 退款原因：{reason}\n" if reason else ""
         return ActionResult(
             slots_update={
                 "refund_amount": amount,
@@ -121,6 +144,7 @@ class PreviewRefundAction:
                     f"- 订单：{slots.get('order_no_confirmed') or slots.get('order_no')}\n"
                     f"- 报名明细：{matched.get('item_name')}\n"
                     f"- 退款类型：{refund_type}\n"
+                    f"{reason_line}"
                     f"- 退款金额：¥{amount}（该明细全额退款）\n"
                     f"回复「确认」提交申请，回复「取消」放弃。"
                 ),

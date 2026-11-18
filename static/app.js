@@ -31,8 +31,11 @@ function addMsg(role, text, meta, cls) {
   const div = document.createElement("div");
   div.className = "msg " + role + (cls ? " " + cls : "");
   const who = role === "user" ? "学员" : role === "system" ? "系统" : "小度";
-  div.innerHTML = `<div class="who"></div><div class="bubble"></div>` +
-    (meta ? `<div class="meta"></div>` : "");
+  const avatar = role === "user" ? "学" : "✦";
+  div.innerHTML = `<div class="avatar"></div>` +
+    `<div class="body"><div class="who"></div><div class="bubble"></div>` +
+    (meta ? `<div class="meta"></div>` : "") + `</div>`;
+  div.querySelector(".avatar").textContent = avatar;
   div.querySelector(".who").textContent = who;
   div.querySelector(".bubble").textContent = text;
   if (meta) div.querySelector(".meta").textContent = meta;
