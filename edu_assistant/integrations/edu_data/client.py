@@ -176,6 +176,14 @@ class EduDataClient:
             json_body=body,
         )
 
+    async def list_refund_requests(
+        self, user_id: str | int, status: str | None = None
+    ) -> dict:
+        params: dict[str, Any] = {"pageSize": 50}
+        if status:
+            params["status"] = status
+        return await self.get("/refund-requests", user_id=user_id, params=params)
+
     # —— 工单 ——
 
     async def create_service_ticket(self, user_id: str | int, body: dict) -> dict:

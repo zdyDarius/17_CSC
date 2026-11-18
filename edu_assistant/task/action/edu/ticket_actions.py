@@ -160,6 +160,45 @@ def build_ticket_title(ticket_type: str, description: str) -> str:
     return f"【{label}】{desc}"
 
 
+TICKET_STATUS_LABELS = {
+    "pending": "待处理",
+    "in_progress": "处理中",
+    "closed": "已关闭",
+}
+
+
+@register_action("action_list_tickets")
+class ListTicketsAction:
+    """工单进度查询：列出学员全部工单；可选按 TK 编号过滤。"""
+
+    async def run(self, ctx: ActionContext) -> ActionResult:
+        ticket_no = str(ctx.slots.get("ticket_no", "") or "").strip()
+        try:
+            result = await ctx.edu_client.list_service_tickets(ctx.user_id)
+        except (EduDataApiError, EduDataNetworkError) as exc:
+            return ActionResult(slots_update={"query_failed": exc.message})
+        rows = result.get("list", []) or []
+        if ticket_no:
+            rows = [r for r in rows if ticket_no.upper() in str(r.get("ticketNo", "")).upper()]
+        if not rows:
+            hint = f"编号包含 {ticket_no} 的" if ticket_no else ""
+            summary = f"没有找到{hint}工单记录。"
+        else:
+            lines = []
+            for r in rows[:8]:
+                ttype = TICKET_TYPE_LABELS.get(str(r.get("ticketType", "")), str(r.get("ticketType", "")))
+                status = TICKET_STATUS_LABELS.get(
+                    str(r.get("ticketStatus", "")), str(r.get("ticketStatus", ""))
+                )
+                opened = str(r.get("openedAt") or "")[:10]
+                line = f"· {r.get('ticketNo')}（{status}）{ttype}｜{r.get('title')}"
+                if opened:
+                    line += f"｜提交于 {opened}"
+                lines.append(line)
+            summary = f"你的工单共 {len(rows)} 张：\n" + "\n".join(lines)
+        return ActionResult(slots_update={"tickets_summary": summary})
+
+
 @register_action("action_submit_ticket")
 class SubmitTicketAction:
     """提交工单：解析确认 → 调工单 API。

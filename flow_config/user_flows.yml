@@ -85,8 +85,83 @@ slots:
   ticket_no:
     type: text
     label: 工单编号
+  tickets_summary:
+    type: text
+    label: 工单列表摘要
+  refund_no:
+    type: text
+    label: 退款编号（查询用）
+  refunds_summary:
+    type: text
+    label: 退款列表摘要
 
 flows:
+  # ============ 退款进度查询 ============
+  refund_status_query:
+    name: 退款进度查询
+    description: 查询学员已提交退款申请的审批进度与状态，可按 RF 编号查。不是发起新退款。
+    steps:
+      - id: start
+        type: start
+        next: list_refunds
+
+      - id: list_refunds
+        type: action
+        action: action_list_refunds
+        next:
+          - if: "slots.query_failed"
+            then: query_error
+          - else: show_refunds
+
+      - id: show_refunds
+        type: response
+        template:
+          text: "{{ slots.refunds_summary }}"
+        next: end
+
+      - id: query_error
+        type: response
+        template:
+          text: "{{ slots.query_failed }}"
+        next: end
+
+      - id: end
+        type: end
+        next: []
+
+  # ============ 工单进度查询 ============
+  ticket_status_query:
+    name: 工单进度查询
+    description: 查询学员已提交工单的处理进度与状态，可按 TK 编号查。不是提交新工单。
+    steps:
+      - id: start
+        type: start
+        next: list_tickets
+
+      - id: list_tickets
+        type: action
+        action: action_list_tickets
+        next:
+          - if: "slots.query_failed"
+            then: query_error
+          - else: show_tickets
+
+      - id: show_tickets
+        type: response
+        template:
+          text: "{{ slots.tickets_summary }}"
+        next: end
+
+      - id: query_error
+        type: response
+        template:
+          text: "{{ slots.query_failed }}"
+        next: end
+
+      - id: end
+        type: end
+        next: []
+
   # ============ 订单状态查询 ============
   order_status_query:
     name: 订单状态查询

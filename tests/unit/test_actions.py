@@ -233,3 +233,56 @@ def test_normalize_refund_type_reason_falls_back_to_label():
     result = asyncio.run(get_action("action_normalize_refund_type").run(ctx))
     assert result.slots_update["refund_type"] == "schedule_conflict"
     assert result.slots_update["refund_reason"] == "时间冲突"
+
+
+# —— 退款/工单进度查询 Action（假客户端） ——
+
+class FakeQueryClient:
+    def __init__(self, refunds=None, tickets=None):
+        self._refunds = refunds or []
+        self._tickets = tickets or []
+
+    async def list_refund_requests(self, user_id, status=None):
+        return {"list": self._refunds}
+
+    async def list_service_tickets(self, user_id):
+        return {"list": self._tickets}
+
+
+def test_list_refunds_renders_summary_and_filter():
+    import edu_assistant.task.action.edu.refund_actions  # noqa: F401
+
+    ctx = make_ctx({})
+    ctx.edu_client = FakeQueryClient(refunds=[
+        {"refundNo": "RF0000016325", "refundStatusCode": "pending",
+         "applyAmount": "1249.5", "appliedAt": "2026-01-03 14:09:41"},
+        {"refundNo": "RF0000021019", "refundStatusCode": "approved",
+         "applyAmount": "2499.5", "approvedAmount": "2499.5"},
+    ])
+    result = asyncio.run(get_action("action_list_refunds").run(ctx))
+    summary = result.slots_update["refunds_summary"]
+    assert "RF0000016325" in summary and "待审批" in summary
+    # 按 RF 编号过滤
+    ctx2 = make_ctx({"refund_no": "RF0000021019"})
+    ctx2.edu_client = ctx.edu_client
+    result2 = asyncio.run(get_action("action_list_refunds").run(ctx2))
+    assert "RF0000021019" in result2.slots_update["refunds_summary"]
+    assert "RF0000016325" not in result2.slots_update["refunds_summary"]
+
+
+def test_list_tickets_renders_summary_and_empty_case():
+    import edu_assistant.task.action.edu.ticket_actions  # noqa: F401
+
+    ctx = make_ctx({})
+    ctx.edu_client = FakeQueryClient(tickets=[
+        {"ticketNo": "TK20261118150623343286", "ticketType": "after_sales",
+         "ticketStatus": "pending", "title": "【售后咨询】第三章视频", "openedAt": "2026-11-18 15:06:21"},
+    ])
+    result = asyncio.run(get_action("action_list_tickets").run(ctx))
+    summary = result.slots_update["tickets_summary"]
+    assert "TK20261118150623343286" in summary and "待处理" in summary
+    # 无记录
+    ctx2 = make_ctx({})
+    ctx2.edu_client = FakeQueryClient()
+    result2 = asyncio.run(get_action("action_list_tickets").run(ctx2))
+    assert "没有找到" in result2.slots_update["tickets_summary"]

@@ -110,7 +110,7 @@ class TurnPlanValidator:
                         active.flow_id if active else None,
                     )
                     return TurnPlanValidationResult(False, ClarifyReason.INVALID_TASK_COMMAND)
-                result = self._validate_slots(command, target_flow)
+                result = self._validate_slots(command, target_flow, catalog)
                 if result is not None:
                     return result
             if isinstance(command, ResumeTaskCommand):
@@ -137,12 +137,21 @@ class TurnPlanValidator:
                 return TurnPlanValidationResult(False, ClarifyReason.TOO_MANY_PAUSED_TASKS)
         return TurnPlanValidationResult(True)
 
-    def _validate_slots(self, command: SetSlotsCommand, flow) -> TurnPlanValidationResult | None:
-        """槽位名称存在且类型匹配；返回 None 表示通过。"""
+    def _validate_slots(
+        self, command: SetSlotsCommand, flow, catalog: FlowCatalog
+    ) -> TurnPlanValidationResult | None:
+        """槽位名称存在且类型匹配；返回 None 表示通过。
+
+        白名单以 YAML 顶层槽位声明兜底：流程的 collect 步骤只引用其收集的槽位，
+        而 set_slots 可为无 collect 的流程（如查询流程的可选过滤槽）赋值。
+        """
         if not isinstance(command.slots, dict):
             return TurnPlanValidationResult(False, ClarifyReason.INVALID_TASK_COMMAND)
         for name, value in command.slots.items():
             slot = flow.slots.get(name)
+            if slot is None and name in catalog.slots:
+                logger.info("set_slots 使用顶层声明槽位（非该流程 collect 槽）: %s", name)
+                continue
             if slot is None:
                 logger.warning("set_slots 引用未声明槽位: %s", name)
                 return TurnPlanValidationResult(False, ClarifyReason.INVALID_TASK_COMMAND)

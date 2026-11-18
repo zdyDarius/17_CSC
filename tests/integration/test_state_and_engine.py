@@ -77,4 +77,6 @@ def test_engine_builder_smoke(tmp_path, monkeypatch):
         "learning_progress_query",
         "refund_request",
         "ticket_submit",
+        "refund_status_query",
+        "ticket_status_query",
     }

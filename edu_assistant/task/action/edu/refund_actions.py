@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from edu_assistant.integrations.edu_data.order_item_adapter import REFUND_STATUS_LABELS
 from edu_assistant.task.action.base import ActionContext, ActionResult
 from edu_assistant.task.action.registry import register_action
 from edu_assistant.utils.errors import EduDataApiError, EduDataNetworkError
@@ -98,6 +99,40 @@ class NormalizeRefundTypeAction:
             clear_slots=["refund_type", "refund_type_raw"],
             slots_update={"refund_type_invalid": "请从以下类型中选择：1 个人原因、2 课程不满意、3 时间冲突、4 重复购买（回复序号或名称）。"},
         )
+
+
+@register_action("action_list_refunds")
+class ListRefundsAction:
+    """退款进度查询：列出学员全部退款申请；可选按 RF 编号过滤。"""
+
+    async def run(self, ctx: ActionContext) -> ActionResult:
+        refund_no = str(ctx.slots.get("refund_no", "") or "").strip()
+        try:
+            result = await ctx.edu_client.list_refund_requests(ctx.user_id)
+        except (EduDataApiError, EduDataNetworkError) as exc:
+            return ActionResult(slots_update={"query_failed": exc.message})
+        rows = result.get("list", []) or []
+        if refund_no:
+            rows = [r for r in rows if refund_no.upper() in str(r.get("refundNo", "")).upper()]
+        if not rows:
+            hint = f"编号包含 {refund_no} 的" if refund_no else ""
+            summary = f"没有找到{hint}退款申请记录。"
+        else:
+            lines = []
+            for r in rows[:8]:
+                status = REFUND_STATUS_LABELS.get(
+                    str(r.get("refundStatusCode", "")), str(r.get("refundStatusCode", ""))
+                )
+                applied = str(r.get("appliedAt") or "")[:10]
+                line = f"· {r.get('refundNo')}（{status}）申请 ¥{r.get('applyAmount')}"
+                approved = r.get("approvedAmount")
+                if approved not in (None, "", "0.00"):
+                    line += f"，核定 ¥{approved}"
+                if applied:
+                    line += f"，申请于 {applied}"
+                lines.append(line)
+            summary = f"你的退款申请共 {len(rows)} 笔：\n" + "\n".join(lines)
+        return ActionResult(slots_update={"refunds_summary": summary})
 
 
 @register_action("action_preview_refund")

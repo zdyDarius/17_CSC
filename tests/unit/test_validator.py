@@ -253,14 +253,29 @@ def test_set_slots_targets_start_flow_not_active_task(validator, state, catalog)
     assert result.valid, f"应通过: {result.reason}"
 
 
-def test_set_slots_against_active_task_undeclared_slot_rejected(validator, state, catalog):
-    """无 start_flow 时，set_slots 仍对活跃任务校验：未声明槽位拒绝。"""
+def test_set_slots_top_level_declared_slot_allowed(validator, state, catalog):
+    """顶层声明过的槽位即使不属于当前流程的 collect 槽，也允许 set_slots
+    （供查询流程的可选过滤槽等场景；跨流程仅软限制）。"""
     state.tasks.active = TaskInstance(
         flow_id="refund_request", flow_name="退款申请", step_id="ask_order_no", slots={}
     )
     plan = TurnPlan(
         task=TaskTurnPlan(
-            commands=[SetSlotsCommand(command="set_slots", slots={"cohort_name": "x"})]
+            commands=[SetSlotsCommand(command="set_slots", slots={"ticket_no": "TK123"})]
+        )
+    )
+    result = validator.validate(plan, state, catalog)
+    assert result.valid, f"应通过: {result.reason}"
+
+
+def test_set_slots_fully_undeclared_slot_rejected(validator, state, catalog):
+    """顶层也没声明的槽位名 → 拒绝（防 LLM 编造槽位）。"""
+    state.tasks.active = TaskInstance(
+        flow_id="refund_request", flow_name="退款申请", step_id="ask_order_no", slots={}
+    )
+    plan = TurnPlan(
+        task=TaskTurnPlan(
+            commands=[SetSlotsCommand(command="set_slots", slots={"made_up_slot": "x"})]
         )
     )
     result = validator.validate(plan, state, catalog)

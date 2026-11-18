@@ -283,3 +283,55 @@ def test_history_state_and_isolation():
             f"/api/traces/{request_id}", headers={"X-User-Id": "1002"}
         )
         assert trace_other.status_code == 404
+
+
+# ============ 退款/工单进度查询（回归：原误启动提交流程） ============
+
+
+def test_refund_status_query():
+    with _client() as client:
+        session = _new_session(client)
+        result = _chat(client, session, "退款到哪一步了")
+        assert result["track"] == "task"
+        text = _bot_text(result)
+        assert "退款申请" in text or "RF" in text, text[:200]
+
+
+def test_refund_status_query_by_no():
+    """用户 1002 有一笔 pending 的 RF0000016325。"""
+    with _client() as client:
+        session = _new_session(client)
+        result = _chat(client, session, "查一下 RF0000016325 的退款进度")
+        assert result["track"] == "task"
+        assert "RF0000016325" in _bot_text(result)
+
+
+def test_ticket_status_query():
+    with _client() as client:
+        session = _new_session(client)
+        result = _chat(client, session, "查询我的工单进度")
+        assert result["track"] == "task"
+        text = _bot_text(result)
+        assert "工单" in text and ("TK" in text or "没有" in text), text[:200]
+
+
+def test_ticket_query_regression_not_submit_flow():
+    """回归用户踩到的 bug：“查询该工单进度”被误规划成提交工单要订单号。"""
+    with _client() as client:
+        session = _new_session(client)
+        _chat(client, session, "取消RF0000016325 这个工单")  # 先制造插问语境
+        result = _chat(client, session, "查询该工单进度")
+        assert result["track"] == "task"
+        text = _bot_text(result)
+        assert "订单号" not in text, f"误启动提交流程: {text[:200]}"
+        assert "工单" in text
+
+
+def test_cancel_business_record_does_not_submit():
+    """取消退款/工单属平台人工审批边界：不得误启动任何提交流程。"""
+    with _client() as client:
+        session = _new_session(client)
+        result = _chat(client, session, "取消RF0000016325 这个工单")
+        text = _bot_text(result)
+        # 不应开始收集订单号/描述等提交动作
+        assert "订单号（形如" not in text and "请选择工单类型" not in text, text[:200]

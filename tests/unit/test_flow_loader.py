@@ -58,6 +58,8 @@ def test_real_config_loads(tmp_path):
         "learning_progress_query",
         "refund_request",
         "ticket_submit",
+        "refund_status_query",
+        "ticket_status_query",
     }
 
 
