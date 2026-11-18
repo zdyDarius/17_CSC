@@ -101,13 +101,22 @@ curl -s -H "X-User-Id: 1001" http://127.0.0.1:8000/api/v1/me/student-profile
 
 ## 演示用户
 
-前端演示页提供三个演示用户（`X-User-Id`）：`1001 / 1002 / 1003`。
+前端演示页提供四个演示用户（`X-User-Id`）：
+
+| 用户 | 用途 | 说明 |
+| --- | --- | --- |
+| 1001 / 1002 / 1003 | 常规场景 | 订单/进度/工单/退款记录丰富，适合展示查询类场景 |
+| 295 | **退款完整流程演示** | 3 笔订单均无占用中的退款申请，可完整走通"提交退款 → 返回退款编号" |
+
+注意：每提交一笔退款，对应明细即产生待审批申请（edu-data 业务规则会拦截同明细重复退款）；
+295 的订单被演示消耗后，可在业务库中选择其他干净订单的学员替换（查询：`order_item_status IN ('paid','completed')`
+且无 `pending/approved` 退款申请的明细）。
 演示用户需要在 edu-data 的 `sys_user` 表中存在且启用；会话、订单、退款、工单均按该用户隔离。
 可用以下命令核对演示用户数据：
 
 ```bash
-curl -s -H "X-User-Id: 1001" http://127.0.0.1:8000/api/v1/orders | head
-curl -s -H "X-User-Id: 1001" http://127.0.0.1:8000/api/v1/me/cohorts | head
+curl -s -H "X-User-Id: 295" http://127.0.0.1:8000/api/v1/orders | head
+curl -s -H "X-User-Id: 295" http://127.0.0.1:8000/api/v1/me/cohorts | head
 ```
 
 ## 数据库说明
