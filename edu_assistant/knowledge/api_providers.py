@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from edu_assistant.domain.message import MessageObject
 from edu_assistant.integrations.edu_data.client import EduDataClient
 from edu_assistant.knowledge.provider import BaseProvider, KnowledgeMaterial
@@ -9,6 +11,42 @@ from edu_assistant.utils.errors import EduDataApiError, EduDataNetworkError
 from edu_assistant.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+# 问句后缀/引导语清洗：用户整句“XX课程大概是什么情况”→ 检索词“XX”
+_QUESTION_SUFFIX = re.compile(
+    r"((大概)?是什么情况|什么情况|怎么样|如何|介绍(一下)?|的?情况|信息|呢)+$"
+)
+_LEAD_PHRASES = (
+    "我想了解一下", "我想了解", "帮我介绍一下", "帮我介绍", "介绍一下",
+    "我想咨询一下", "我想咨询", "请问", "想看看", "看看", "了解一下",
+)
+_TRAILING_ROLE = re.compile(r"(课程|班次)+$")
+_TRAILING_COHORT_NO = re.compile(r"\s*\d{4,8}期$")
+
+
+def _clean_keyword(text: str) -> str:
+    """从用户整句中提取课程检索词：去问句后缀、引导语与尾部课程/班次。"""
+    t = (text or "").strip().strip("？?！!。")
+    t = _QUESTION_SUFFIX.sub("", t).strip()
+    for lead in _LEAD_PHRASES:
+        if t.startswith(lead):
+            t = t[len(lead):].strip()
+            break
+    t = _TRAILING_ROLE.sub("", t).strip(" ·，,。")
+    return t
+
+
+def _keyword_variants(keyword: str) -> list[str]:
+    """检索词多级回落：完整词 → 去期号 → 取“·”左侧主名。保序去重。"""
+    variants: list[str] = []
+    for base in (keyword, _TRAILING_COHORT_NO.sub("", keyword).strip()):
+        if base and base not in variants:
+            variants.append(base)
+        if "·" in base:
+            left = base.split("·")[0].strip(" ·")
+            if left and left not in variants:
+                variants.append(left)
+    return variants
 
 DELIVERY_MODE_LABELS = {
     "online_live": "线上直播",
@@ -53,12 +91,23 @@ class SeriesApiProvider(BaseProvider):
                     content="用户没有提供课程关键词，也无法从业务对象获取课程。需要向用户澄清想了解哪门课程（请用户说出课程名称，如「Python 全栈」）。",
                 )
             ]
-        try:
-            search = await self.edu_client.search_series(keyword)
-        except (EduDataApiError, EduDataNetworkError) as exc:
-            logger.warning("课程搜索失败: %s", exc.message)
-            return []
-        rows = search.get("list", []) or []
+        keyword = _clean_keyword(keyword)
+        if not keyword:
+            keyword = extract_keyword(query, focused_object)
+        # 多级回落检索：完整词 → 去期号 → “·”左侧主名
+        rows: list[dict] = []
+        used_keyword = keyword
+        for variant in _keyword_variants(keyword):
+            try:
+                search = await self.edu_client.search_series(variant)
+            except (EduDataApiError, EduDataNetworkError) as exc:
+                logger.warning("课程搜索失败 kw=%s: %s", variant, exc.message)
+                continue
+            found = search.get("list", []) or []
+            if found:
+                rows = found
+                used_keyword = variant
+                break
         if not rows:
             return [
                 KnowledgeMaterial(

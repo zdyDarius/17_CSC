@@ -257,7 +257,13 @@ function renderProfile(p) {
     .map((t) => `<span>${esc(t)}</span>`).join("");
   box.innerHTML = `
     <div class="profile-card">
-      <div class="name">学员 ${esc(state.userId())}</div>
+      <div class="top">
+        <div class="face">学</div>
+        <div>
+          <div class="name">学员 ${esc(state.userId())}</div>
+          <div class="sid">studentId ${esc(p.studentId ?? "-")}</div>
+        </div>
+      </div>
       <div class="tags">${tags || `<div class="sec-empty">档案资料待补充</div>`}</div>
     </div>`;
 }

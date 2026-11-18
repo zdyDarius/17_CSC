@@ -65,3 +65,23 @@ def test_rag_score_ordering(rag):
     materials = asyncio.run(rag.fetch("退款金额怎么算", None, "1001"))
     scores = [m.meta.get("score", 0) for m in materials]
     assert scores == sorted(scores, reverse=True)
+
+
+# —— 课程检索词清洗与多级回落（api_providers） ——
+
+def test_clean_keyword_strips_question_suffix():
+    from edu_assistant.knowledge.api_providers import _clean_keyword
+
+    assert _clean_keyword("公务员面试冲刺班·录播课程大概是什么情况") == "公务员面试冲刺班·录播"
+    assert _clean_keyword("Python 全栈课程大概是什么情况") == "Python 全栈"
+    assert _clean_keyword("考研数学冲刺模考班怎么样？") == "考研数学冲刺模考班"
+
+
+def test_keyword_variants_ordered_dedup():
+    from edu_assistant.knowledge.api_providers import _keyword_variants
+
+    variants = _keyword_variants("公务员面试冲刺班·录播")
+    assert variants[0] == "公务员面试冲刺班·录播"
+    assert "公务员面试冲刺班" in variants  # “·”左侧主名回落
+    # 无重复
+    assert len(variants) == len(set(variants))
