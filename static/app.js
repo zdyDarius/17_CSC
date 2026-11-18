@@ -64,6 +64,29 @@ function showTyping(on) { $("typing").hidden = !on; }
 
 /* ============ 会话 ============ */
 
+const STORE_PREFIX = "edu-cs-session-";
+
+function readStoredSession(userId) {
+  try { return localStorage.getItem(STORE_PREFIX + userId); } catch { return null; }
+}
+function writeStoredSession(userId, sid) {
+  try { localStorage.setItem(STORE_PREFIX + userId, sid); } catch {}
+}
+function clearStoredSession(userId) {
+  try { localStorage.removeItem(STORE_PREFIX + userId); } catch {}
+}
+
+function adoptSession(sid, { restored = false, welcomeText = null } = {}) {
+  state.sessionId = sid;
+  messagesEl.innerHTML = "";
+  if (!restored && welcomeText) {
+    addBot(welcomeText, restored ? "已从浏览器恢复会话" : "欢迎引导 · 不占用流程栈", false);
+  }
+  setConn(`已连接 · ${sid.slice(0, 8)}… · 学员 ${state.userId()}`, true);
+  $("archiveBox").innerHTML = `<div class="sec-empty">发送消息后，任务状态与处理轨迹会显示在这里。</div>`;
+  loadContext();
+}
+
 async function createSession() {
   setConn("创建会话中…");
   try {
@@ -77,15 +100,31 @@ async function createSession() {
       return;
     }
     const data = await resp.json();
-    state.sessionId = data.sessionId;
-    messagesEl.innerHTML = "";
-    addBot(data.welcomeText, "欢迎引导 · 不占用流程栈", false);
-    setConn(`已连接 · ${data.sessionId.slice(0, 8)}… · 学员 ${state.userId()}`, true);
-    $("archiveBox").innerHTML = `<div class="sec-empty">发送消息后，任务状态与处理轨迹会显示在这里。</div>`;
-    loadContext();
+    writeStoredSession(state.userId(), data.sessionId);
+    adoptSession(data.sessionId, { welcomeText: data.welcomeText });
   } catch (e) {
     setConn("服务不可达：" + e.message);
   }
+}
+
+/* 页面刷新/切用户：优先接续浏览器里保存的会话；失效则回退新建 */
+async function ensureSession() {
+  if (state.sessionId) return;
+  const stored = readStoredSession(state.userId());
+  if (stored) {
+    try {
+      const check = await fetch(`/api/sessions/${stored}/state`, {
+        headers: { "X-User-Id": state.userId() },
+      });
+      if (check.ok) {
+        adoptSession(stored, { restored: true });
+        loadHistory(); // 回放历史消息（含欢迎语）
+        return;
+      }
+    } catch { /* 服务不可达时保持断连提示 */ }
+    clearStoredSession(state.userId());
+  }
+  await createSession();
 }
 
 function newMessageId() {
@@ -96,7 +135,8 @@ function newMessageId() {
 async function sendText(text) {
   if (state.pending) return;
   if (!text || !text.trim()) return;
-  if (!state.sessionId) { await createSession(); if (!state.sessionId) return; }
+  await ensureSession();
+  if (!state.sessionId) return;
   state.pending = true;
   $("sendBtn").disabled = true;
   const messageId = newMessageId();
@@ -404,6 +444,9 @@ $("input").addEventListener("keydown", (e) => {
   }
 });
 $("newSessionBtn").onclick = createSession;
-$("userSel").onchange = createSession;
+$("userSel").onchange = () => {
+  state.sessionId = null; // 切换用户：断开旧引用，接续（或新建）该用户的会话
+  ensureSession();
+};
 
-createSession();
+ensureSession();
